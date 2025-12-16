@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>今日のワンカード｜Tarot 78</title>
+<style>
+:root{
+  --space1:#0b1030; --space2:#2a2bcf; --space3:#0a0b2b;
+  --panelBrd:rgba(255,255,255,.16);
+  --shadow:0 14px 36px rgba(0,0,0,.28);
+  --gold:#f6de9a;
+  --ink:#0c0b2a;
+}
+*{box-sizing:border-box} html,body{height:100%; background: #0a0b2b;}
+body{
+min-height:100dvh;
+  margin:0; color:#fafaff;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Noto Sans JP","Hiragino Kaku Gothic ProN", sans-serif;
+  background:
+    radial-gradient(900px 700px at 70% 15%, rgba(255,255,255,.10) 0%, transparent 65%),
+    radial-gradient(900px 700px at 20% 25%, rgba(170,210,255,.12) 0%, transparent 70%),
+    radial-gradient(900px 520px at 50% 92%, rgba(255,205,255,.06) 0%, transparent 70%),
+    linear-gradient(180deg, var(--space2), var(--space1) 55%, var(--space3));
+  overflow-x:hidden;
+}
+.stars,.sparkles{position:fixed; inset:0; pointer-events:none}
+.stars{
+  background-image:
+    radial-gradient(1.4px 1.4px at 12% 22%, #fff 0 45%, transparent 50%),
+    radial-gradient(1.0px 1.0px at 78% 18%, #fff 0 45%, transparent 50%),
+    radial-gradient(1.2px 1.2px at 48% 62%, #fff 0 45%, transparent 50%),
+    radial-gradient(1.0px 1.0px at 90% 70%, #fff 0 45%, transparent 50%),
+    radial-gradient(1.2px 1.2px at 20% 82%, #fff 0 45%, transparent 50%),
+    radial-gradient(1.0px 1.0px at 33% 40%, #ffffffcc 0 45%, transparent 50%),
+    radial-gradient(1.0px 1.0px at 64% 46%, #ffffffb8 0 45%, transparent 50%),
+    radial-gradient(1.0px 1.0px at 8% 55%, #ffffffb8 0 45%, transparent 50%),
+    radial-gradient(1.0px 1.0px at 84% 52%, #ffffffb8 0 45%, transparent 50%);
+  opacity:.88;
+  filter: drop-shadow(0 0 10px rgba(255,255,255,.22));
+  animation: twinkle 9s linear infinite;
+}
+.sparkles{
+  background-image:
+    radial-gradient(7px 7px at 30% 20%, #ffffffa8 0 30%, transparent 40%),
+    radial-gradient(10px 10px at 82% 36%, #ffffff9c 0 30%, transparent 40%),
+    radial-gradient(6px 6px at 56% 80%, #ffffff85 0 30%, transparent 40%);
+  mix-blend-mode: screen;
+  animation: float 12s ease-in-out infinite;
+  opacity:.26;
+}
+@keyframes twinkle{0%,100%{opacity:.68}50%{opacity:1}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+
+.wrap{
+  min-height:100dvh;
+  display:flex; align-items:center; justify-content:center;
+  padding: min(6vh,56px) 16px calc(56px + env(safe-area-inset-bottom));
+}
+.panel{width:min(1020px, 96vw); text-align:center;}
+h1{margin:0 0 6px; letter-spacing:.08em; font-weight:900; font-size: clamp(20px, 2.6vw, 30px);}
+.sub{opacity:.86; margin:0 0 18px; font-size: clamp(12px, 1.7vw, 14px);}
+
+.cards{display:grid; grid-template-columns: repeat(3, minmax(94px, 220px)); gap: clamp(16px, 3vw, 28px);
+  align-items:end; justify-content:center; margin: 18px auto 14px; perspective:1200px; -webkit-perspective:1200px;}
+.card{position:relative; width:100%; aspect-ratio: 2.5 / 3.8; border-radius: 18px; background: transparent;
+  box-shadow: var(--shadow); cursor:pointer; border:0; padding:0; outline:none; isolation:isolate;}
+.flip{position:absolute; inset:0; transform-style:preserve-3d; -webkit-transform-style:preserve-3d;
+  transition: transform .7s cubic-bezier(.2,.8,.2,1); border-radius:18px;}
+.face{position:absolute; inset:0; border-radius:18px; overflow:hidden;
+  border:1px solid rgba(255,255,255,.16);
+  backface-visibility:hidden; -webkit-backface-visibility:hidden;
+}
+.face::after{
+  content:""; position:absolute; inset:0; border-radius:18px; pointer-events:none;
+  background:
+    repeating-linear-gradient(105deg,
+      rgba(246,222,154,.10) 0 3px,
+      rgba(246,222,154,.02) 3px 7px,
+      rgba(246,222,154,.12) 7px 9px,
+      rgba(246,222,154,.04) 9px 13px),
+    radial-gradient(26px 26px at 10% 10%, rgba(246,222,154,.40) 0 30%, transparent 55%),
+    radial-gradient(34px 34px at 90% 12%, rgba(246,222,154,.35) 0 28%, transparent 60%),
+    radial-gradient(28px 28px at 12% 90%, rgba(246,222,154,.30) 0 28%, transparent 60%),
+    radial-gradient(28px 28px at 88% 90%, rgba(246,222,154,.32) 0 28%, transparent 60%);
+  box-shadow:
+    inset 0 0 0 2px rgba(246,222,154,.72),
+    inset 0 0 22px rgba(246,222,154,.20),
+    0 0 0 1px rgba(0,0,0,.25);
+  mix-blend-mode: screen;
+  opacity:.92;
+}
+.face.back{background: url("data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%22360%22%20height%3D%22540%22%20viewBox%3D%220%200%20360%20540%22%3E%0A%20%20%3Cdefs%3E%0A%20%20%20%20%3ClinearGradient%20id%3D%22bg%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%220%22%20stop-color%3D%22%230c1032%22/%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22%231b1450%22/%3E%0A%20%20%20%20%3C/linearGradient%3E%0A%20%20%20%20%3Cpattern%20id%3D%22dots%22%20width%3D%2248%22%20height%3D%2248%22%20patternUnits%3D%22userSpaceOnUse%22%3E%0A%20%20%20%20%20%20%3Ccircle%20cx%3D%228%22%20cy%3D%2210%22%20r%3D%221.2%22%20fill%3D%22%23f6de9a%22%20opacity%3D%220.9%22/%3E%0A%20%20%20%20%20%20%3Ccircle%20cx%3D%2228%22%20cy%3D%2218%22%20r%3D%221.0%22%20fill%3D%22%23ffffff%22%20opacity%3D%220.55%22/%3E%0A%20%20%20%20%20%20%3Ccircle%20cx%3D%2242%22%20cy%3D%2236%22%20r%3D%221.1%22%20fill%3D%22%23f6de9a%22%20opacity%3D%220.55%22/%3E%0A%20%20%20%20%20%20%3Ccircle%20cx%3D%2216%22%20cy%3D%2240%22%20r%3D%220.9%22%20fill%3D%22%23ffffff%22%20opacity%3D%220.35%22/%3E%0A%20%20%20%20%3C/pattern%3E%0A%20%20%20%20%3CradialGradient%20id%3D%22glow%22%20cx%3D%2250%25%22%20cy%3D%2235%25%22%20r%3D%2270%25%22%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23ffffff%22%20stop-opacity%3D%220.18%22/%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23ffffff%22%20stop-opacity%3D%220%22/%3E%0A%20%20%20%20%3C/radialGradient%3E%0A%20%20%20%20%3Cpath%20id%3D%22orn%22%20d%3D%22M0%2C18%20C22%2C0%2046%2C0%2068%2C18%20C46%2C36%2022%2C36%200%2C18%20Z%22%20fill%3D%22none%22%20stroke%3D%22%23f6de9a%22%20stroke-opacity%3D%220.32%22%20stroke-width%3D%222%22/%3E%0A%20%20%3C/defs%3E%0A%0A%20%20%3Crect%20width%3D%22360%22%20height%3D%22540%22%20fill%3D%22url%28%23bg%29%22/%3E%0A%20%20%3Crect%20width%3D%22360%22%20height%3D%22540%22%20fill%3D%22url%28%23glow%29%22/%3E%0A%20%20%3Crect%20width%3D%22360%22%20height%3D%22540%22%20fill%3D%22url%28%23dots%29%22%20opacity%3D%220.9%22/%3E%0A%0A%20%20%3Crect%20x%3D%2218%22%20y%3D%2218%22%20width%3D%22324%22%20height%3D%22504%22%20rx%3D%2218%22%20fill%3D%22none%22%20stroke%3D%22%23f6de9a%22%20stroke-opacity%3D%220.55%22%20stroke-width%3D%222%22/%3E%0A%20%20%3Crect%20x%3D%2228%22%20y%3D%2228%22%20width%3D%22304%22%20height%3D%22484%22%20rx%3D%2214%22%20fill%3D%22none%22%20stroke%3D%22%23f6de9a%22%20stroke-opacity%3D%220.22%22%20stroke-width%3D%222%22/%3E%0A%0A%20%20%3Cg%20transform%3D%22translate%2844%2044%29%22%3E%0A%20%20%20%20%3Cuse%20href%3D%22%23orn%22/%3E%0A%20%20%20%20%3Cuse%20href%3D%22%23orn%22%20transform%3D%22translate%280%2016%29%20scale%280.82%29%22/%3E%0A%20%20%3C/g%3E%0A%20%20%3Cg%20transform%3D%22translate%28316%2044%29%20scale%28-1%201%29%22%3E%0A%20%20%20%20%3Cuse%20href%3D%22%23orn%22/%3E%0A%20%20%20%20%3Cuse%20href%3D%22%23orn%22%20transform%3D%22translate%280%2016%29%20scale%280.82%29%22/%3E%0A%20%20%3C/g%3E%0A%20%20%3Cg%20transform%3D%22translate%2844%20496%29%20scale%281%20-1%29%22%3E%0A%20%20%20%20%3Cuse%20href%3D%22%23orn%22/%3E%0A%20%20%20%20%3Cuse%20href%3D%22%23orn%22%20transform%3D%22translate%280%2016%29%20scale%280.82%29%22/%3E%0A%20%20%3C/g%3E%0A%20%20%3Cg%20transform%3D%22translate%28316%20496%29%20scale%28-1%20-1%29%22%3E%0A%20%20%20%20%3Cuse%20href%3D%22%23orn%22/%3E%0A%20%20%20%20%3Cuse%20href%3D%22%23orn%22%20transform%3D%22translate%280%2016%29%20scale%280.82%29%22/%3E%0A%20%20%3C/g%3E%0A%0A%20%20%3Cg%20transform%3D%22translate%28180%20270%29%22%3E%0A%20%20%20%20%3Ccircle%20r%3D%2262%22%20fill%3D%22none%22%20stroke%3D%22%23f6de9a%22%20stroke-opacity%3D%220.26%22%20stroke-width%3D%222%22/%3E%0A%20%20%20%20%3Ccircle%20r%3D%2246%22%20fill%3D%22none%22%20stroke%3D%22%23f6de9a%22%20stroke-opacity%3D%220.18%22%20stroke-width%3D%222%22/%3E%0A%20%20%20%20%3Cpath%20d%3D%22M-28%2C0%20H28%22%20stroke%3D%22%23f6de9a%22%20stroke-opacity%3D%220.22%22%20stroke-width%3D%222%22/%3E%0A%20%20%20%20%3Cpath%20d%3D%22M0%2C-28%20V28%22%20stroke%3D%22%23f6de9a%22%20stroke-opacity%3D%220.22%22%20stroke-width%3D%222%22/%3E%0A%20%20%20%20%3Ccircle%20r%3D%226%22%20fill%3D%22%23f6de9a%22%20opacity%3D%220.35%22/%3E%0A%20%20%3C/g%3E%0A%3C/svg%3E") center/cover no-repeat;}
+/* 任意：cards/CardBacks.png を使うなら .back に useFile を付けて切替できます */
+.face.back.useFile{background: url("./cards/CardBacks.png") center/cover no-repeat;}
+.face.front{transform: rotateY(180deg); -webkit-transform: rotateY(180deg); background:#fff center/cover no-repeat;}
+.@media (hover:hover) and (pointer:fine){
+  .card:hover .flip{
+    transform: translateY(-6px) rotateX(6deg) rotateY(-4deg) scale(1.02);
+  }
+}
+.card.flipped .flip{transform: rotateY(180deg); -webkit-transform: rotateY(180deg);}
+.card.disabled{cursor:not-allowed; filter:grayscale(.55) brightness(.90);}
+.card.disabled .flip{transform:none !important;}
+
+.reading{margin: 18px auto 0; max-width: 900px; padding: clamp(16px,2.8vw,22px); border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255,255,255,.13), rgba(255,255,255,.07));
+  border: 1px solid var(--panelBrd); box-shadow: var(--shadow);
+  display:none; opacity:0; transform: translateY(8px);}
+.reading.show{display:block; animation: fadeIn .45s ease forwards;}
+@keyframes fadeIn{to{opacity:1; transform:none;}}
+.readingHead{display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin-bottom:10px;}
+.titleRow{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+.title{font-size: 16px; font-weight:900; letter-spacing:.06em; margin:0; opacity:.92;}
+.chip{font-size:12px; padding:4px 10px; border-radius:999px; border:1px solid rgba(255,255,255,.20); background: rgba(0,0,0,.10); opacity:.9;}
+.msg{font-size: clamp(18px, 3vw, 28px); line-height:1.55; letter-spacing:.02em; font-weight:900;
+  text-shadow: 0 0 14px rgba(255,255,255,.16), 0 0 30px rgba(169,215,255,.20); text-align:left; margin:0;}
+.hint{opacity:.78; margin:10px 0 0; font-size:13px; text-align:left;}
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px;}
+.box{border:1px solid rgba(255,255,255,.14); background: rgba(0,0,0,.08); border-radius:14px; padding:12px; text-align:left;}
+.box h3{margin:0 0 6px; font-size:13px; letter-spacing:.04em;}
+.box p{margin:0; font-size:13px; line-height:1.7; opacity:.92;}
+.small{opacity:.76; font-size:12px; margin-top:6px;}
+.lineGuide{margin-top:12px; padding:12px; border-radius:14px; border:1px dashed rgba(255,255,255,.22);
+  background: rgba(0,0,0,.08); text-align:left;}
+.lineGuide strong{display:block; margin-bottom:6px;}
+.copyNote{font-size:12px; opacity:.78; margin:0 0 8px;}
+textarea{width:100%; min-height:92px; border-radius:12px; border:1px solid rgba(255,255,255,.16);
+  background: rgba(0,0,0,.18); color:#fff; padding:10px 12px; font-size:12px; line-height:1.6;}
+.actions{display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-top:12px;}
+.btn{display:inline-block; padding: 10px 18px; border-radius: 999px; font-weight:900; letter-spacing:.06em;
+  color:var(--ink); background: linear-gradient(180deg, #fff6d3, #f0d27e); border:0;
+  box-shadow: 0 10px 26px rgba(246,222,154,.20), inset 0 1px 0 #fff8; cursor:pointer;}
+.btn2{background: rgba(0,0,0,.16); color: rgba(255,255,255,.92); border:1px solid rgba(255,255,255,.18); box-shadow:none; cursor:pointer;}
+@media (max-width: 720px){.grid2{grid-template-columns:1fr;}}
+@media (max-width: 520px){.cards{grid-template-columns: repeat(3, minmax(86px, 1fr)); gap: 14px;}}
+</style>
+</head>
+<body>
+<div class="stars"></div><div class="sparkles"></div>
+<div class="wrap">
+  <main class="panel">
+    <h1>今日のワンカード占い</h1>
+    <p class="sub">大アルカナ＋小アルカナ（78枚）から<strong>3枚を表示</strong>。直感で1枚選ぶと<em>くるり</em>とめくれます。</p>
+
+    <section class="cards" id="cards" aria-label="カード選択"></section>
+
+    <section id="reading" class="reading" aria-live="polite" aria-atomic="true">
+      <div class="readingHead">
+        <div class="titleRow">
+          <p id="pickedName" class="title">結果</p>
+          <span id="pickedKw" class="chip" style="display:none"></span>
+          <span id="pickedType" class="chip" style="display:none"></span>
+        </div>
+        <span id="pickedArcana" class="chip" style="display:none"></span>
+      </div>
+
+      <p id="message" class="msg"></p>
+      <p class="hint" id="useHint">—</p>
+
+      <div class="grid2">
+        <div class="box">
+          <h3>このカードがよく出る人の傾向</h3>
+          <p id="tendency1">—</p>
+          <p id="tendency2" class="small">—</p>
+        </div>
+        <div class="box">
+          <h3>この結果の活かし方</h3>
+          <p id="use1">—</p>
+          <p id="use2" class="small">—</p>
+        </div>
+      </div>
+
+      <div class="lineGuide">
+        <strong>この結果をLINEで送ると…</strong>
+        <p style="margin:0; opacity:.9; font-size:13px; line-height:1.7;">
+          あなたのカードに合わせた<strong>「整えワンポイント」</strong>を自動で返信します。<br/>
+          そのままコピペして送ってください（1回でOK）。
+        </p>
+
+        <p class="copyNote">LINEに送る用（コピペ）</p>
+        <textarea id="lineText" readonly></textarea>
+
+        <div class="actions">
+          <button id="retry" class="btn">もう一度占う</button>
+          <button id="copyLine" class="btn2">LINE文をコピー</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+const DECK = [{"id": "major_00", "arcana": "Major", "name": "愚者", "keywords": "始まり / 自由", "typeName": "あなたのテーマ：自由・始動", "file": "00-TheFool.png", "msgs": ["自由な一歩が景色を変える。", "軽やかに始めてOK。", "準備より“試す”が追い風。"], "tendency": ["このテーマが続く時は“今の課題”が強いサイン。", "同じカードが増えるほど、整えポイントが明確。", "焦らず“1つ”でOK。"], "use": ["今日の整えを1つだけ実行。", "できたら深呼吸を1回。", "小さく続けるほど現実が動く。"]}, {"id": "major_01", "arcana": "Major", "name": "魔術師", "keywords": "才能 / 創造", "typeName": "あなたのテーマ：創造・実行", "file": "01-TheMagician.png", "msgs": ["今ある道具で十分。", "“できる”前提で動くと開く。", "小さく試すほど上手くいく。"], "tendency": ["このテーマが続く時は“今の課題”が強いサイン。", "同じカードが増えるほど、整えポイントが明確。", "焦らず“1つ”でOK。"], "use": ["今日の整えを1つだけ実行。", "できたら深呼吸を1回。", "小さく続けるほど現実が動く。"]}, {"id": "major_02", "arcana": "Major", "name": "女教皇", "keywords": "直感 / 静けさ", "typeName": "あなたのテーマ：直感・内観", "file": "02-TheHighPriestess.png", "msgs": ["静けさが答えを連れてくる。", "情報より直感を優先。", "待つ力が、強さになる。"], "tendency": ["このテーマが続く時は“今の課題”が強いサイン。", "同じカードが増えるほど、整えポイントが明確。", "焦らず“1つ”でOK。"], "use": ["今日の整えを1つだけ実行。", "できたら深呼吸を1回。", "小さく続けるほど現実が動く。"]}, {"id": "major_03", "arcana": "Major", "name": "女帝", "keywords": "愛 / 豊かさ", "typeName": "あなたのテーマ：受容・豊かさ", "file": "03-TheEmpress.png", "msgs": ["受け取るほど満ちていく。", "自分を甘やかす日。", "丁寧に整えると豊かさが増える。"], "tendency": ["このテーマが続く時は“今の課題”が強いサイン。", "同じカードが増えるほど、整えポイントが明確。", "焦らず“1つ”でOK。"], "use": ["今日の整えを1つだけ実行。", "できたら深呼吸を1回。", "小さく続けるほど現実が動く。"]}, {"id": "major_04", "arcana": "Major", "name": "皇帝", "keywords": "軸 / 安定", "typeName": "あなたのテーマ：軸・境界線", "file": "04-TheEmperor.png", "msgs": ["軸を立てれば、ぶれない。", "境界線があなたを守る。", "決めたら進む。大丈夫。"], "tendency": ["このテーマが続く時は“今の課題”が強いサイン。", "同じカードが増えるほど、整えポイントが明確。", "焦らず“1つ”でOK。"], "use": ["今日の整えを1つだけ実行。", "できたら深呼吸を1回。", "小さく続けるほど現実が動く。"]}, {"id": "major_05", "arcana": "Major", "name": "法王", "keywords": "学び / 信頼", "typeName": "あなたのテーマ：学び・信頼", "file": "05-TheHierophant.png", "msgs": ["基本に戻ると一気に進む。", "信頼は丁寧さで育つ。", "良い学びが味方になる。"], "tendency": ["このテーマが続く時は“今の課題”が強いサイン。", "同じカードが増えるほど、整えポイントが明確。", "焦らず“1つ”でOK。"], "use": ["今日の整えを1つだけ実行。", "できたら深呼吸を1回。", "小さく続けるほど現実が動く。"]}, {"id": "major_06", "arcana": "Major", "name": "恋人", "keywords": "選択 / 調和", "typeName": "あなたのテーマ：選択・調和", "file": "06-TheLovers.png", "msgs": ["“好き”を選ぶほど整う。", "素直さが関係を動かす。", "心がYESの方へ。"], "tendency": ["このテーマが続く時は“今の課題”が強いサイン。", "同じカードが増えるほど、整えポイントが明確。", "焦らず“1つ”でOK。"], "use": ["今日の整えを1つだけ実行。", "できたら深呼吸を1回。", "小さく続けるほど現実が動く。"]}, {"id": "major_07", "arcana": "Major", "name": "戦車", "keywords": "前進 / 勝利", "typeName": "あなたのテーマ：前進・突破", "file": "07-TheChariot.png", "msgs": ["迷いより前進。", "勢いは味方。小さく加速。", "自分の手綱は自分で握る。"], "tendency": ["このテーマが続く時は“今の課題”が強いサイン。", "同じカードが増えるほど、整えポイントが明確。", "焦らず“1つ”でOK。"], "use": ["今日の整えを1つだけ実行。", "できたら深呼吸を1回。", "小さく続けるほど現実が動く。"]}, {"id": "major_08", "arcana": "Major", "name": "力", "keywords": "自信 / しなやかさ", "typeName": "あなたのテーマ：しなやかさ・胆力", "file": "08-Strength.png", "msgs": ["優しさは最強の強さ。", "焦らず、でも諦めない。", "自分を信じるほど落ち着く。"], "tendency": ["このテーマが続く時は“今の課題”が強いサイン。", "同じカードが増えるほど、整えポイントが明確。", "焦らず“1つ”でOK。"], "use": ["今日の整えを1つだけ実行。", "できたら深呼吸を1回。", "小さく続けるほど現実が動く。"]}, {"id": "major_09", "arcana": "Major", "name": "隠者", "keywords": "内省 / 導き", "typeName": "あなたのテーマ：内省・本質", "file": "09-TheHermit.png", "msgs": ["一人時間がヒントになる。", "急がず“本音”を拾って。", "内側を整えると道が見える。"], "tendency": ["このテーマが続く時は“今の課題”が強いサイン。", "同じカードが増えるほど、整えポイントが明確。", "焦らず“1つ”でOK。"], "use": ["今日の整えを1つだけ実行。", "できたら深呼吸を1回。", "小さく続けるほど現実が動く。"]}, {"id": "major_10", "arcana": "Major", "name": "運命の輪", "keywords": "転機 / 流れ", "typeName": "あなたのテーマ：転機・流れ", "file": "10-WheelOfFortune.png", "msgs": ["チャンスは回ってくる。", "流れに乗る準備ができてる。", "偶然を味方にして。"], "tendency": ["このテーマが続く時は“今の課題”が強いサイン。", "同じカードが増えるほど、整えポイントが明確。", "焦らず“1つ”でOK。"], "use": ["今日の整えを1つだけ実行。", "できたら深呼吸を1回。", "小さく続けるほど現実が動く。"]}, {"id": "major_11", "arcana": "Major", "name": "正義", "keywords": "バランス / 誠実", "typeName": "あなたのテーマ：整える・判断", "file": "11-Justice.png", "msgs": ["整えるほど、結果が出る。", "判断基準を明確に。", "誠実さが運を守る。"], "tendency": ["このテーマが続く時は“今の課題”が強いサイン。", "同じカードが増えるほど、整えポイントが明確。", "焦らず“1つ”でOK。"], "use": ["今日の整えを1つだけ実行。", "できたら深呼吸を1回。", "小さく続けるほど現実が動く。"]}, {"id": "major_12", "arcana": "Major", "name": "吊るされた男", "keywords": "視点 / 余白", "typeName": "あなたのテーマ：視点転換・余白", "file": "12-TheHangedMan.png", "msgs": ["見方を変えると軽くなる。", "今は“余白”が鍵。", "止まる勇気が次を開く。"], "tendency": ["このテーマが続く時は“今の課題”が強いサイン。", "同じカードが増えるほど、整えポイントが明確。", "焦らず“1つ”でOK。"], "use": ["今日の整えを1つだけ実行。", "できたら深呼吸を1回。", "小さく続けるほど現実が動く。"]}, {"id": "major_13", "arcana": "Major", "name": "死神", "keywords": "変化 / 再生", "typeName": "あなたのテーマ：手放し・再生", "file": "13-Death.png", "msgs": ["手放すほど、軽くなる。", "終わりは始まりの合図。", "刷新があなたを守る。"], "tendency": ["このテーマが続く時は“今の課題”が強いサイン。", "同じカードが増えるほど、整えポイントが明確。", "焦らず“1つ”でOK。"], "use": ["今日の整えを1つだけ実行。", "できたら深呼吸を1回。", "小さく続けるほど現実が動く。"]}, {"id": "major_14", "arcana": "Major", "name": "節制", "keywords": "調整 / 統合", "typeName": "あなたのテーマ：調整・統合", "file": "14-Temperance.png", "msgs": ["ちょうどいいが最強。", "混ぜ合わせると完成する。", "ゆっくり整えば大丈夫。"], "tendency": ["このテーマが続く時は“今の課題”が強いサイン。", "同じカードが増えるほど、整えポイントが明確。", "焦らず“1つ”でOK。"], "use": ["今日の整えを1つだけ実行。", "できたら深呼吸を1回。", "小さく続けるほど現実が動く。"]}, {"id": "major_15", "arcana": "Major", "name": "悪魔", "keywords": "執着 / 解放", "typeName": "あなたのテーマ：執着解除・選択", "file": "15-TheDevil.png", "msgs": ["縛りに気づけば自由。", "欲しいものを正直に。", "依存より“選択”へ戻ろう。"], "tendency": ["このテーマが続く時は“今の課題”が強いサイン。", "同じカードが増えるほど、整えポイントが明確。", "焦らず“1つ”でOK。"], "use": ["今日の整えを1つだけ実行。", "できたら深呼吸を1回。", "小さく続けるほど現実が動く。"]}, {"id": "major_16", "arcana": "Major", "name": "塔", "keywords": "刷新 / 目覚め", "typeName": "あなたのテーマ：刷新・本音", "file": "16-TheTower.png", "msgs": ["崩れるのは次の合図。", "本音に戻ると立て直せる。", "怖さの奥に宝がある。"], "tendency": ["このテーマが続く時は“今の課題”が強いサイン。", "同じカードが増えるほど、整えポイントが明確。", "焦らず“1つ”でOK。"], "use": ["今日の整えを1つだけ実行。", "できたら深呼吸を1回。", "小さく続けるほど現実が動く。"]}, {"id": "major_17", "arcana": "Major", "name": "星", "keywords": "希望 / 癒し", "typeName": "あなたのテーマ：希望・癒し", "file": "17-TheStar.png", "msgs": ["希望はちゃんと届いてる。", "癒しが運を整える日。", "小さな光を信じて。"], "tendency": ["このテーマが続く時は“今の課題”が強いサイン。", "同じカードが増えるほど、整えポイントが明確。", "焦らず“1つ”でOK。"], "use": ["今日の整えを1つだけ実行。", "できたら深呼吸を1回。", "小さく続けるほど現実が動く。"]}, {"id": "major_18", "arcana": "Major", "name": "月", "keywords": "感情 / 直感", "typeName": "あなたのテーマ：感情・直感", "file": "18-TheMoon.png", "msgs": ["不安は未確定のサイン。", "確かめるほど安心になる。", "夜のひらめきを大切に。"], "tendency": ["このテーマが続く時は“今の課題”が強いサイン。", "同じカードが増えるほど、整えポイントが明確。", "焦らず“1つ”でOK。"], "use": ["今日の整えを1つだけ実行。", "できたら深呼吸を1回。", "小さく続けるほど現実が動く。"]}, {"id": "major_19", "arcana": "Major", "name": "太陽", "keywords": "喜び / 成功", "typeName": "あなたのテーマ：喜び・成功", "file": "19-TheSun.png", "msgs": ["あなたの魅力が輝く日。", "堂々と受け取ってOK。", "素直に喜ぶほど運が上がる。"], "tendency": ["このテーマが続く時は“今の課題”が強いサイン。", "同じカードが増えるほど、整えポイントが明確。", "焦らず“1つ”でOK。"], "use": ["今日の整えを1つだけ実行。", "できたら深呼吸を1回。", "小さく続けるほど現実が動く。"]}, {"id": "major_20", "arcana": "Major", "name": "審判", "keywords": "再起 / 呼び声", "typeName": "あなたのテーマ：再起・呼び声", "file": "20-Judgement.png", "msgs": ["やり直しは強さになる。", "大事な連絡の予感。", "決めるほど現実が動く。"], "tendency": ["このテーマが続く時は“今の課題”が強いサイン。", "同じカードが増えるほど、整えポイントが明確。", "焦らず“1つ”でOK。"], "use": ["今日の整えを1つだけ実行。", "できたら深呼吸を1回。", "小さく続けるほど現実が動く。"]}, {"id": "major_21", "arcana": "Major", "name": "世界", "keywords": "完成 / 祝福", "typeName": "あなたのテーマ：完成・祝福", "file": "21-TheWorld.png", "msgs": ["ちゃんと達成できている。", "祝福はもう来てる。", "次のステージへ進もう。"], "tendency": ["このテーマが続く時は“今の課題”が強いサイン。", "同じカードが増えるほど、整えポイントが明確。", "焦らず“1つ”でOK。"], "use": ["今日の整えを1つだけ実行。", "できたら深呼吸を1回。", "小さく続けるほど現実が動く。"]}, {"id": "wands_01", "arcana": "Minor", "suit": "Wands", "name": "ワンド01", "keywords": "行動 / 変化 / 始動", "typeName": "あなたのテーマ：行動・変化タイプ（始動）", "file": "Wands01.png", "msgs": ["まずは5分だけ着手。勢いが生まれる。", "迷ったら“やってみる”が近道。", "小さな挑戦が次の扉を開く。", "今日のテーマは「始動」。小さく整えるほど進む。"], "tendency": ["動くほど整うタイプ。", "考えすぎると止まりやすい。", "“一歩”が運を呼ぶ。", "「始動」が続く時は“今のテーマ”が強い状態。"], "use": ["最初の一歩を最小に。", "5分だけ動く。", "動いたら自分を褒める。", "キーワード「始動」を今日1回だけ実行。"]}, {"id": "wands_02", "arcana": "Minor", "suit": "Wands", "name": "ワンド02", "keywords": "行動 / 変化 / 選択", "typeName": "あなたのテーマ：行動・変化タイプ（選択）", "file": "Wands02.png", "msgs": ["まずは5分だけ着手。勢いが生まれる。", "迷ったら“やってみる”が近道。", "小さな挑戦が次の扉を開く。", "今日のテーマは「選択」。小さく整えるほど進む。"], "tendency": ["動くほど整うタイプ。", "考えすぎると止まりやすい。", "“一歩”が運を呼ぶ。", "「選択」が続く時は“今のテーマ”が強い状態。"], "use": ["最初の一歩を最小に。", "5分だけ動く。", "動いたら自分を褒める。", "キーワード「選択」を今日1回だけ実行。"]}, {"id": "wands_03", "arcana": "Minor", "suit": "Wands", "name": "ワンド03", "keywords": "行動 / 変化 / 拡大", "typeName": "あなたのテーマ：行動・変化タイプ（拡大）", "file": "Wands03.png", "msgs": ["まずは5分だけ着手。勢いが生まれる。", "迷ったら“やってみる”が近道。", "小さな挑戦が次の扉を開く。", "今日のテーマは「拡大」。小さく整えるほど進む。"], "tendency": ["動くほど整うタイプ。", "考えすぎると止まりやすい。", "“一歩”が運を呼ぶ。", "「拡大」が続く時は“今のテーマ”が強い状態。"], "use": ["最初の一歩を最小に。", "5分だけ動く。", "動いたら自分を褒める。", "キーワード「拡大」を今日1回だけ実行。"]}, {"id": "wands_04", "arcana": "Minor", "suit": "Wands", "name": "ワンド04", "keywords": "行動 / 変化 / 安定", "typeName": "あなたのテーマ：行動・変化タイプ（安定）", "file": "Wands04.png", "msgs": ["まずは5分だけ着手。勢いが生まれる。", "迷ったら“やってみる”が近道。", "小さな挑戦が次の扉を開く。", "今日のテーマは「安定」。小さく整えるほど進む。"], "tendency": ["動くほど整うタイプ。", "考えすぎると止まりやすい。", "“一歩”が運を呼ぶ。", "「安定」が続く時は“今のテーマ”が強い状態。"], "use": ["最初の一歩を最小に。", "5分だけ動く。", "動いたら自分を褒める。", "キーワード「安定」を今日1回だけ実行。"]}, {"id": "wands_05", "arcana": "Minor", "suit": "Wands", "name": "ワンド05", "keywords": "行動 / 変化 / 変化", "typeName": "あなたのテーマ：行動・変化タイプ（変化）", "file": "Wands05.png", "msgs": ["まずは5分だけ着手。勢いが生まれる。", "迷ったら“やってみる”が近道。", "小さな挑戦が次の扉を開く。", "今日のテーマは「変化」。小さく整えるほど進む。"], "tendency": ["動くほど整うタイプ。", "考えすぎると止まりやすい。", "“一歩”が運を呼ぶ。", "「変化」が続く時は“今のテーマ”が強い状態。"], "use": ["最初の一歩を最小に。", "5分だけ動く。", "動いたら自分を褒める。", "キーワード「変化」を今日1回だけ実行。"]}, {"id": "wands_06", "arcana": "Minor", "suit": "Wands", "name": "ワンド06", "keywords": "行動 / 変化 / 前進", "typeName": "あなたのテーマ：行動・変化タイプ（前進）", "file": "Wands06.png", "msgs": ["まずは5分だけ着手。勢いが生まれる。", "迷ったら“やってみる”が近道。", "小さな挑戦が次の扉を開く。", "今日のテーマは「前進」。小さく整えるほど進む。"], "tendency": ["動くほど整うタイプ。", "考えすぎると止まりやすい。", "“一歩”が運を呼ぶ。", "「前進」が続く時は“今のテーマ”が強い状態。"], "use": ["最初の一歩を最小に。", "5分だけ動く。", "動いたら自分を褒める。", "キーワード「前進」を今日1回だけ実行。"]}, {"id": "wands_07", "arcana": "Minor", "suit": "Wands", "name": "ワンド07", "keywords": "行動 / 変化 / 検証", "typeName": "あなたのテーマ：行動・変化タイプ（検証）", "file": "Wands07.png", "msgs": ["まずは5分だけ着手。勢いが生まれる。", "迷ったら“やってみる”が近道。", "小さな挑戦が次の扉を開く。", "今日のテーマは「検証」。小さく整えるほど進む。"], "tendency": ["動くほど整うタイプ。", "考えすぎると止まりやすい。", "“一歩”が運を呼ぶ。", "「検証」が続く時は“今のテーマ”が強い状態。"], "use": ["最初の一歩を最小に。", "5分だけ動く。", "動いたら自分を褒める。", "キーワード「検証」を今日1回だけ実行。"]}, {"id": "wands_08", "arcana": "Minor", "suit": "Wands", "name": "ワンド08", "keywords": "行動 / 変化 / 加速", "typeName": "あなたのテーマ：行動・変化タイプ（加速）", "file": "Wands08.png", "msgs": ["まずは5分だけ着手。勢いが生まれる。", "迷ったら“やってみる”が近道。", "小さな挑戦が次の扉を開く。", "今日のテーマは「加速」。小さく整えるほど進む。"], "tendency": ["動くほど整うタイプ。", "考えすぎると止まりやすい。", "“一歩”が運を呼ぶ。", "「加速」が続く時は“今のテーマ”が強い状態。"], "use": ["最初の一歩を最小に。", "5分だけ動く。", "動いたら自分を褒める。", "キーワード「加速」を今日1回だけ実行。"]}, {"id": "wands_09", "arcana": "Minor", "suit": "Wands", "name": "ワンド09", "keywords": "行動 / 変化 / 成熟", "typeName": "あなたのテーマ：行動・変化タイプ（成熟）", "file": "Wands09.png", "msgs": ["まずは5分だけ着手。勢いが生まれる。", "迷ったら“やってみる”が近道。", "小さな挑戦が次の扉を開く。", "今日のテーマは「成熟」。小さく整えるほど進む。"], "tendency": ["動くほど整うタイプ。", "考えすぎると止まりやすい。", "“一歩”が運を呼ぶ。", "「成熟」が続く時は“今のテーマ”が強い状態。"], "use": ["最初の一歩を最小に。", "5分だけ動く。", "動いたら自分を褒める。", "キーワード「成熟」を今日1回だけ実行。"]}, {"id": "wands_10", "arcana": "Minor", "suit": "Wands", "name": "ワンド10", "keywords": "行動 / 変化 / 完了", "typeName": "あなたのテーマ：行動・変化タイプ（完了）", "file": "Wands10.png", "msgs": ["まずは5分だけ着手。勢いが生まれる。", "迷ったら“やってみる”が近道。", "小さな挑戦が次の扉を開く。", "今日のテーマは「完了」。小さく整えるほど進む。"], "tendency": ["動くほど整うタイプ。", "考えすぎると止まりやすい。", "“一歩”が運を呼ぶ。", "「完了」が続く時は“今のテーマ”が強い状態。"], "use": ["最初の一歩を最小に。", "5分だけ動く。", "動いたら自分を褒める。", "キーワード「完了」を今日1回だけ実行。"]}, {"id": "wands_11", "arcana": "Minor", "suit": "Wands", "name": "ワンド11", "keywords": "行動 / 変化 / 芽生え", "typeName": "あなたのテーマ：行動・変化タイプ（芽生え）", "file": "Wands11.png", "msgs": ["まずは5分だけ着手。勢いが生まれる。", "迷ったら“やってみる”が近道。", "小さな挑戦が次の扉を開く。", "今日のテーマは「芽生え」。小さく整えるほど進む。"], "tendency": ["動くほど整うタイプ。", "考えすぎると止まりやすい。", "“一歩”が運を呼ぶ。", "「芽生え」が続く時は“今のテーマ”が強い状態。"], "use": ["最初の一歩を最小に。", "5分だけ動く。", "動いたら自分を褒める。", "キーワード「芽生え」を今日1回だけ実行。"]}, {"id": "wands_12", "arcana": "Minor", "suit": "Wands", "name": "ワンド12", "keywords": "行動 / 変化 / 推進", "typeName": "あなたのテーマ：行動・変化タイプ（推進）", "file": "Wands12.png", "msgs": ["まずは5分だけ着手。勢いが生まれる。", "迷ったら“やってみる”が近道。", "小さな挑戦が次の扉を開く。", "今日のテーマは「推進」。小さく整えるほど進む。"], "tendency": ["動くほど整うタイプ。", "考えすぎると止まりやすい。", "“一歩”が運を呼ぶ。", "「推進」が続く時は“今のテーマ”が強い状態。"], "use": ["最初の一歩を最小に。", "5分だけ動く。", "動いたら自分を褒める。", "キーワード「推進」を今日1回だけ実行。"]}, {"id": "wands_13", "arcana": "Minor", "suit": "Wands", "name": "ワンド13", "keywords": "行動 / 変化 / 受容", "typeName": "あなたのテーマ：行動・変化タイプ（受容）", "file": "Wands13.png", "msgs": ["まずは5分だけ着手。勢いが生まれる。", "迷ったら“やってみる”が近道。", "小さな挑戦が次の扉を開く。", "今日のテーマは「受容」。小さく整えるほど進む。"], "tendency": ["動くほど整うタイプ。", "考えすぎると止まりやすい。", "“一歩”が運を呼ぶ。", "「受容」が続く時は“今のテーマ”が強い状態。"], "use": ["最初の一歩を最小に。", "5分だけ動く。", "動いたら自分を褒める。", "キーワード「受容」を今日1回だけ実行。"]}, {"id": "wands_14", "arcana": "Minor", "suit": "Wands", "name": "ワンド14", "keywords": "行動 / 変化 / 統率", "typeName": "あなたのテーマ：行動・変化タイプ（統率）", "file": "Wands14.png", "msgs": ["まずは5分だけ着手。勢いが生まれる。", "迷ったら“やってみる”が近道。", "小さな挑戦が次の扉を開く。", "今日のテーマは「統率」。小さく整えるほど進む。"], "tendency": ["動くほど整うタイプ。", "考えすぎると止まりやすい。", "“一歩”が運を呼ぶ。", "「統率」が続く時は“今のテーマ”が強い状態。"], "use": ["最初の一歩を最小に。", "5分だけ動く。", "動いたら自分を褒める。", "キーワード「統率」を今日1回だけ実行。"]}, {"id": "cups_01", "arcana": "Minor", "suit": "Cups", "name": "カップ01", "keywords": "感情 / 愛 / 始動", "typeName": "あなたのテーマ：愛と受容タイプ（始動）", "file": "Cups01.png", "msgs": ["優しい言葉が鍵。", "気持ちを大切にすると整う。", "受け取ることを自分に許してOK。", "今日のテーマは「始動」。小さく整えるほど進む。"], "tendency": ["共感で関係を育てるタイプ。", "気遣い過多で疲れやすい。", "“本音”が鍵。", "「始動」が続く時は“今のテーマ”が強い状態。"], "use": ["優しい一言を1つ。", "受け取る練習を1つ。", "本音を小さく伝える。", "キーワード「始動」を今日1回だけ実行。"]}, {"id": "cups_02", "arcana": "Minor", "suit": "Cups", "name": "カップ02", "keywords": "感情 / 愛 / 選択", "typeName": "あなたのテーマ：愛と受容タイプ（選択）", "file": "Cups02.png", "msgs": ["優しい言葉が鍵。", "気持ちを大切にすると整う。", "受け取ることを自分に許してOK。", "今日のテーマは「選択」。小さく整えるほど進む。"], "tendency": ["共感で関係を育てるタイプ。", "気遣い過多で疲れやすい。", "“本音”が鍵。", "「選択」が続く時は“今のテーマ”が強い状態。"], "use": ["優しい一言を1つ。", "受け取る練習を1つ。", "本音を小さく伝える。", "キーワード「選択」を今日1回だけ実行。"]}, {"id": "cups_03", "arcana": "Minor", "suit": "Cups", "name": "カップ03", "keywords": "感情 / 愛 / 拡大", "typeName": "あなたのテーマ：愛と受容タイプ（拡大）", "file": "Cups03.png", "msgs": ["優しい言葉が鍵。", "気持ちを大切にすると整う。", "受け取ることを自分に許してOK。", "今日のテーマは「拡大」。小さく整えるほど進む。"], "tendency": ["共感で関係を育てるタイプ。", "気遣い過多で疲れやすい。", "“本音”が鍵。", "「拡大」が続く時は“今のテーマ”が強い状態。"], "use": ["優しい一言を1つ。", "受け取る練習を1つ。", "本音を小さく伝える。", "キーワード「拡大」を今日1回だけ実行。"]}, {"id": "cups_04", "arcana": "Minor", "suit": "Cups", "name": "カップ04", "keywords": "感情 / 愛 / 安定", "typeName": "あなたのテーマ：愛と受容タイプ（安定）", "file": "Cups04.png", "msgs": ["優しい言葉が鍵。", "気持ちを大切にすると整う。", "受け取ることを自分に許してOK。", "今日のテーマは「安定」。小さく整えるほど進む。"], "tendency": ["共感で関係を育てるタイプ。", "気遣い過多で疲れやすい。", "“本音”が鍵。", "「安定」が続く時は“今のテーマ”が強い状態。"], "use": ["優しい一言を1つ。", "受け取る練習を1つ。", "本音を小さく伝える。", "キーワード「安定」を今日1回だけ実行。"]}, {"id": "cups_05", "arcana": "Minor", "suit": "Cups", "name": "カップ05", "keywords": "感情 / 愛 / 変化", "typeName": "あなたのテーマ：愛と受容タイプ（変化）", "file": "Cups05.png", "msgs": ["優しい言葉が鍵。", "気持ちを大切にすると整う。", "受け取ることを自分に許してOK。", "今日のテーマは「変化」。小さく整えるほど進む。"], "tendency": ["共感で関係を育てるタイプ。", "気遣い過多で疲れやすい。", "“本音”が鍵。", "「変化」が続く時は“今のテーマ”が強い状態。"], "use": ["優しい一言を1つ。", "受け取る練習を1つ。", "本音を小さく伝える。", "キーワード「変化」を今日1回だけ実行。"]}, {"id": "cups_06", "arcana": "Minor", "suit": "Cups", "name": "カップ06", "keywords": "感情 / 愛 / 前進", "typeName": "あなたのテーマ：愛と受容タイプ（前進）", "file": "Cups06.png", "msgs": ["優しい言葉が鍵。", "気持ちを大切にすると整う。", "受け取ることを自分に許してOK。", "今日のテーマは「前進」。小さく整えるほど進む。"], "tendency": ["共感で関係を育てるタイプ。", "気遣い過多で疲れやすい。", "“本音”が鍵。", "「前進」が続く時は“今のテーマ”が強い状態。"], "use": ["優しい一言を1つ。", "受け取る練習を1つ。", "本音を小さく伝える。", "キーワード「前進」を今日1回だけ実行。"]}, {"id": "cups_07", "arcana": "Minor", "suit": "Cups", "name": "カップ07", "keywords": "感情 / 愛 / 検証", "typeName": "あなたのテーマ：愛と受容タイプ（検証）", "file": "Cups07.png", "msgs": ["優しい言葉が鍵。", "気持ちを大切にすると整う。", "受け取ることを自分に許してOK。", "今日のテーマは「検証」。小さく整えるほど進む。"], "tendency": ["共感で関係を育てるタイプ。", "気遣い過多で疲れやすい。", "“本音”が鍵。", "「検証」が続く時は“今のテーマ”が強い状態。"], "use": ["優しい一言を1つ。", "受け取る練習を1つ。", "本音を小さく伝える。", "キーワード「検証」を今日1回だけ実行。"]}, {"id": "cups_08", "arcana": "Minor", "suit": "Cups", "name": "カップ08", "keywords": "感情 / 愛 / 加速", "typeName": "あなたのテーマ：愛と受容タイプ（加速）", "file": "Cups08.png", "msgs": ["優しい言葉が鍵。", "気持ちを大切にすると整う。", "受け取ることを自分に許してOK。", "今日のテーマは「加速」。小さく整えるほど進む。"], "tendency": ["共感で関係を育てるタイプ。", "気遣い過多で疲れやすい。", "“本音”が鍵。", "「加速」が続く時は“今のテーマ”が強い状態。"], "use": ["優しい一言を1つ。", "受け取る練習を1つ。", "本音を小さく伝える。", "キーワード「加速」を今日1回だけ実行。"]}, {"id": "cups_09", "arcana": "Minor", "suit": "Cups", "name": "カップ09", "keywords": "感情 / 愛 / 成熟", "typeName": "あなたのテーマ：愛と受容タイプ（成熟）", "file": "Cups09.png", "msgs": ["優しい言葉が鍵。", "気持ちを大切にすると整う。", "受け取ることを自分に許してOK。", "今日のテーマは「成熟」。小さく整えるほど進む。"], "tendency": ["共感で関係を育てるタイプ。", "気遣い過多で疲れやすい。", "“本音”が鍵。", "「成熟」が続く時は“今のテーマ”が強い状態。"], "use": ["優しい一言を1つ。", "受け取る練習を1つ。", "本音を小さく伝える。", "キーワード「成熟」を今日1回だけ実行。"]}, {"id": "cups_10", "arcana": "Minor", "suit": "Cups", "name": "カップ10", "keywords": "感情 / 愛 / 完了", "typeName": "あなたのテーマ：愛と受容タイプ（完了）", "file": "Cups10.png", "msgs": ["優しい言葉が鍵。", "気持ちを大切にすると整う。", "受け取ることを自分に許してOK。", "今日のテーマは「完了」。小さく整えるほど進む。"], "tendency": ["共感で関係を育てるタイプ。", "気遣い過多で疲れやすい。", "“本音”が鍵。", "「完了」が続く時は“今のテーマ”が強い状態。"], "use": ["優しい一言を1つ。", "受け取る練習を1つ。", "本音を小さく伝える。", "キーワード「完了」を今日1回だけ実行。"]}, {"id": "cups_11", "arcana": "Minor", "suit": "Cups", "name": "カップ11", "keywords": "感情 / 愛 / 芽生え", "typeName": "あなたのテーマ：愛と受容タイプ（芽生え）", "file": "Cups11.png", "msgs": ["優しい言葉が鍵。", "気持ちを大切にすると整う。", "受け取ることを自分に許してOK。", "今日のテーマは「芽生え」。小さく整えるほど進む。"], "tendency": ["共感で関係を育てるタイプ。", "気遣い過多で疲れやすい。", "“本音”が鍵。", "「芽生え」が続く時は“今のテーマ”が強い状態。"], "use": ["優しい一言を1つ。", "受け取る練習を1つ。", "本音を小さく伝える。", "キーワード「芽生え」を今日1回だけ実行。"]}, {"id": "cups_12", "arcana": "Minor", "suit": "Cups", "name": "カップ12", "keywords": "感情 / 愛 / 推進", "typeName": "あなたのテーマ：愛と受容タイプ（推進）", "file": "Cups12.png", "msgs": ["優しい言葉が鍵。", "気持ちを大切にすると整う。", "受け取ることを自分に許してOK。", "今日のテーマは「推進」。小さく整えるほど進む。"], "tendency": ["共感で関係を育てるタイプ。", "気遣い過多で疲れやすい。", "“本音”が鍵。", "「推進」が続く時は“今のテーマ”が強い状態。"], "use": ["優しい一言を1つ。", "受け取る練習を1つ。", "本音を小さく伝える。", "キーワード「推進」を今日1回だけ実行。"]}, {"id": "cups_13", "arcana": "Minor", "suit": "Cups", "name": "カップ13", "keywords": "感情 / 愛 / 受容", "typeName": "あなたのテーマ：愛と受容タイプ（受容）", "file": "Cups13.png", "msgs": ["優しい言葉が鍵。", "気持ちを大切にすると整う。", "受け取ることを自分に許してOK。", "今日のテーマは「受容」。小さく整えるほど進む。"], "tendency": ["共感で関係を育てるタイプ。", "気遣い過多で疲れやすい。", "“本音”が鍵。", "「受容」が続く時は“今のテーマ”が強い状態。"], "use": ["優しい一言を1つ。", "受け取る練習を1つ。", "本音を小さく伝える。", "キーワード「受容」を今日1回だけ実行。"]}, {"id": "cups_14", "arcana": "Minor", "suit": "Cups", "name": "カップ14", "keywords": "感情 / 愛 / 統率", "typeName": "あなたのテーマ：愛と受容タイプ（統率）", "file": "Cups14.png", "msgs": ["優しい言葉が鍵。", "気持ちを大切にすると整う。", "受け取ることを自分に許してOK。", "今日のテーマは「統率」。小さく整えるほど進む。"], "tendency": ["共感で関係を育てるタイプ。", "気遣い過多で疲れやすい。", "“本音”が鍵。", "「統率」が続く時は“今のテーマ”が強い状態。"], "use": ["優しい一言を1つ。", "受け取る練習を1つ。", "本音を小さく伝える。", "キーワード「統率」を今日1回だけ実行。"]}, {"id": "swords_01", "arcana": "Minor", "suit": "Swords", "name": "ソード01", "keywords": "思考 / 整理 / 始動", "typeName": "あなたのテーマ：思考整理タイプ（始動）", "file": "Swords01.png", "msgs": ["頭の中を1行にするとスッキリ。", "整理→判断の順で◎。", "“事実だけ”を書き出してみて。", "今日のテーマは「始動」。小さく整えるほど進む。"], "tendency": ["言語化で進むタイプ。", "考えすぎると消耗しやすい。", "“結論は後で”でOK。", "「始動」が続く時は“今のテーマ”が強い状態。"], "use": ["事実だけ箇条書き。", "1行結論を書く。", "優先順位を1つ決める。", "キーワード「始動」を今日1回だけ実行。"]}, {"id": "swords_02", "arcana": "Minor", "suit": "Swords", "name": "ソード02", "keywords": "思考 / 整理 / 選択", "typeName": "あなたのテーマ：思考整理タイプ（選択）", "file": "Swords02.png", "msgs": ["頭の中を1行にするとスッキリ。", "整理→判断の順で◎。", "“事実だけ”を書き出してみて。", "今日のテーマは「選択」。小さく整えるほど進む。"], "tendency": ["言語化で進むタイプ。", "考えすぎると消耗しやすい。", "“結論は後で”でOK。", "「選択」が続く時は“今のテーマ”が強い状態。"], "use": ["事実だけ箇条書き。", "1行結論を書く。", "優先順位を1つ決める。", "キーワード「選択」を今日1回だけ実行。"]}, {"id": "swords_03", "arcana": "Minor", "suit": "Swords", "name": "ソード03", "keywords": "思考 / 整理 / 拡大", "typeName": "あなたのテーマ：思考整理タイプ（拡大）", "file": "Swords03.png", "msgs": ["頭の中を1行にするとスッキリ。", "整理→判断の順で◎。", "“事実だけ”を書き出してみて。", "今日のテーマは「拡大」。小さく整えるほど進む。"], "tendency": ["言語化で進むタイプ。", "考えすぎると消耗しやすい。", "“結論は後で”でOK。", "「拡大」が続く時は“今のテーマ”が強い状態。"], "use": ["事実だけ箇条書き。", "1行結論を書く。", "優先順位を1つ決める。", "キーワード「拡大」を今日1回だけ実行。"]}, {"id": "swords_04", "arcana": "Minor", "suit": "Swords", "name": "ソード04", "keywords": "思考 / 整理 / 安定", "typeName": "あなたのテーマ：思考整理タイプ（安定）", "file": "Swords04.png", "msgs": ["頭の中を1行にするとスッキリ。", "整理→判断の順で◎。", "“事実だけ”を書き出してみて。", "今日のテーマは「安定」。小さく整えるほど進む。"], "tendency": ["言語化で進むタイプ。", "考えすぎると消耗しやすい。", "“結論は後で”でOK。", "「安定」が続く時は“今のテーマ”が強い状態。"], "use": ["事実だけ箇条書き。", "1行結論を書く。", "優先順位を1つ決める。", "キーワード「安定」を今日1回だけ実行。"]}, {"id": "swords_05", "arcana": "Minor", "suit": "Swords", "name": "ソード05", "keywords": "思考 / 整理 / 変化", "typeName": "あなたのテーマ：思考整理タイプ（変化）", "file": "Swords05.png", "msgs": ["頭の中を1行にするとスッキリ。", "整理→判断の順で◎。", "“事実だけ”を書き出してみて。", "今日のテーマは「変化」。小さく整えるほど進む。"], "tendency": ["言語化で進むタイプ。", "考えすぎると消耗しやすい。", "“結論は後で”でOK。", "「変化」が続く時は“今のテーマ”が強い状態。"], "use": ["事実だけ箇条書き。", "1行結論を書く。", "優先順位を1つ決める。", "キーワード「変化」を今日1回だけ実行。"]}, {"id": "swords_06", "arcana": "Minor", "suit": "Swords", "name": "ソード06", "keywords": "思考 / 整理 / 前進", "typeName": "あなたのテーマ：思考整理タイプ（前進）", "file": "Swords06.png", "msgs": ["頭の中を1行にするとスッキリ。", "整理→判断の順で◎。", "“事実だけ”を書き出してみて。", "今日のテーマは「前進」。小さく整えるほど進む。"], "tendency": ["言語化で進むタイプ。", "考えすぎると消耗しやすい。", "“結論は後で”でOK。", "「前進」が続く時は“今のテーマ”が強い状態。"], "use": ["事実だけ箇条書き。", "1行結論を書く。", "優先順位を1つ決める。", "キーワード「前進」を今日1回だけ実行。"]}, {"id": "swords_07", "arcana": "Minor", "suit": "Swords", "name": "ソード07", "keywords": "思考 / 整理 / 検証", "typeName": "あなたのテーマ：思考整理タイプ（検証）", "file": "Swords07.png", "msgs": ["頭の中を1行にするとスッキリ。", "整理→判断の順で◎。", "“事実だけ”を書き出してみて。", "今日のテーマは「検証」。小さく整えるほど進む。"], "tendency": ["言語化で進むタイプ。", "考えすぎると消耗しやすい。", "“結論は後で”でOK。", "「検証」が続く時は“今のテーマ”が強い状態。"], "use": ["事実だけ箇条書き。", "1行結論を書く。", "優先順位を1つ決める。", "キーワード「検証」を今日1回だけ実行。"]}, {"id": "swords_08", "arcana": "Minor", "suit": "Swords", "name": "ソード08", "keywords": "思考 / 整理 / 加速", "typeName": "あなたのテーマ：思考整理タイプ（加速）", "file": "Swords08.png", "msgs": ["頭の中を1行にするとスッキリ。", "整理→判断の順で◎。", "“事実だけ”を書き出してみて。", "今日のテーマは「加速」。小さく整えるほど進む。"], "tendency": ["言語化で進むタイプ。", "考えすぎると消耗しやすい。", "“結論は後で”でOK。", "「加速」が続く時は“今のテーマ”が強い状態。"], "use": ["事実だけ箇条書き。", "1行結論を書く。", "優先順位を1つ決める。", "キーワード「加速」を今日1回だけ実行。"]}, {"id": "swords_09", "arcana": "Minor", "suit": "Swords", "name": "ソード09", "keywords": "思考 / 整理 / 成熟", "typeName": "あなたのテーマ：思考整理タイプ（成熟）", "file": "Swords09.png", "msgs": ["頭の中を1行にするとスッキリ。", "整理→判断の順で◎。", "“事実だけ”を書き出してみて。", "今日のテーマは「成熟」。小さく整えるほど進む。"], "tendency": ["言語化で進むタイプ。", "考えすぎると消耗しやすい。", "“結論は後で”でOK。", "「成熟」が続く時は“今のテーマ”が強い状態。"], "use": ["事実だけ箇条書き。", "1行結論を書く。", "優先順位を1つ決める。", "キーワード「成熟」を今日1回だけ実行。"]}, {"id": "swords_10", "arcana": "Minor", "suit": "Swords", "name": "ソード10", "keywords": "思考 / 整理 / 完了", "typeName": "あなたのテーマ：思考整理タイプ（完了）", "file": "Swords10.png", "msgs": ["頭の中を1行にするとスッキリ。", "整理→判断の順で◎。", "“事実だけ”を書き出してみて。", "今日のテーマは「完了」。小さく整えるほど進む。"], "tendency": ["言語化で進むタイプ。", "考えすぎると消耗しやすい。", "“結論は後で”でOK。", "「完了」が続く時は“今のテーマ”が強い状態。"], "use": ["事実だけ箇条書き。", "1行結論を書く。", "優先順位を1つ決める。", "キーワード「完了」を今日1回だけ実行。"]}, {"id": "swords_11", "arcana": "Minor", "suit": "Swords", "name": "ソード11", "keywords": "思考 / 整理 / 芽生え", "typeName": "あなたのテーマ：思考整理タイプ（芽生え）", "file": "Swords11.png", "msgs": ["頭の中を1行にするとスッキリ。", "整理→判断の順で◎。", "“事実だけ”を書き出してみて。", "今日のテーマは「芽生え」。小さく整えるほど進む。"], "tendency": ["言語化で進むタイプ。", "考えすぎると消耗しやすい。", "“結論は後で”でOK。", "「芽生え」が続く時は“今のテーマ”が強い状態。"], "use": ["事実だけ箇条書き。", "1行結論を書く。", "優先順位を1つ決める。", "キーワード「芽生え」を今日1回だけ実行。"]}, {"id": "swords_12", "arcana": "Minor", "suit": "Swords", "name": "ソード12", "keywords": "思考 / 整理 / 推進", "typeName": "あなたのテーマ：思考整理タイプ（推進）", "file": "Swords12.png", "msgs": ["頭の中を1行にするとスッキリ。", "整理→判断の順で◎。", "“事実だけ”を書き出してみて。", "今日のテーマは「推進」。小さく整えるほど進む。"], "tendency": ["言語化で進むタイプ。", "考えすぎると消耗しやすい。", "“結論は後で”でOK。", "「推進」が続く時は“今のテーマ”が強い状態。"], "use": ["事実だけ箇条書き。", "1行結論を書く。", "優先順位を1つ決める。", "キーワード「推進」を今日1回だけ実行。"]}, {"id": "swords_13", "arcana": "Minor", "suit": "Swords", "name": "ソード13", "keywords": "思考 / 整理 / 受容", "typeName": "あなたのテーマ：思考整理タイプ（受容）", "file": "Swords13.png", "msgs": ["頭の中を1行にするとスッキリ。", "整理→判断の順で◎。", "“事実だけ”を書き出してみて。", "今日のテーマは「受容」。小さく整えるほど進む。"], "tendency": ["言語化で進むタイプ。", "考えすぎると消耗しやすい。", "“結論は後で”でOK。", "「受容」が続く時は“今のテーマ”が強い状態。"], "use": ["事実だけ箇条書き。", "1行結論を書く。", "優先順位を1つ決める。", "キーワード「受容」を今日1回だけ実行。"]}, {"id": "swords_14", "arcana": "Minor", "suit": "Swords", "name": "ソード14", "keywords": "思考 / 整理 / 統率", "typeName": "あなたのテーマ：思考整理タイプ（統率）", "file": "Swords14.png", "msgs": ["頭の中を1行にするとスッキリ。", "整理→判断の順で◎。", "“事実だけ”を書き出してみて。", "今日のテーマは「統率」。小さく整えるほど進む。"], "tendency": ["言語化で進むタイプ。", "考えすぎると消耗しやすい。", "“結論は後で”でOK。", "「統率」が続く時は“今のテーマ”が強い状態。"], "use": ["事実だけ箇条書き。", "1行結論を書く。", "優先順位を1つ決める。", "キーワード「統率」を今日1回だけ実行。"]}, {"id": "pentacles_01", "arcana": "Minor", "suit": "Pentacles", "name": "ペンタクル01", "keywords": "現実 / 豊かさ / 始動", "typeName": "あなたのテーマ：現実積み上げタイプ（始動）", "file": "Pentacles01.png", "msgs": ["現実の一歩が運を強くする。", "整えるほど豊かさが入りやすい。", "小さな積み重ねが実りに。", "今日のテーマは「始動」。小さく整えるほど進む。"], "tendency": ["積み上げで強くなるタイプ。", "確認が増えると不安が増える。", "“整える”が最短。", "「始動」が続く時は“今のテーマ”が強い状態。"], "use": ["片付けを1箇所。", "支出/在庫を1つ整える。", "小さな積み上げを1つ。", "キーワード「始動」を今日1回だけ実行。"]}, {"id": "pentacles_02", "arcana": "Minor", "suit": "Pentacles", "name": "ペンタクル02", "keywords": "現実 / 豊かさ / 選択", "typeName": "あなたのテーマ：現実積み上げタイプ（選択）", "file": "Pentacles02.png", "msgs": ["現実の一歩が運を強くする。", "整えるほど豊かさが入りやすい。", "小さな積み重ねが実りに。", "今日のテーマは「選択」。小さく整えるほど進む。"], "tendency": ["積み上げで強くなるタイプ。", "確認が増えると不安が増える。", "“整える”が最短。", "「選択」が続く時は“今のテーマ”が強い状態。"], "use": ["片付けを1箇所。", "支出/在庫を1つ整える。", "小さな積み上げを1つ。", "キーワード「選択」を今日1回だけ実行。"]}, {"id": "pentacles_03", "arcana": "Minor", "suit": "Pentacles", "name": "ペンタクル03", "keywords": "現実 / 豊かさ / 拡大", "typeName": "あなたのテーマ：現実積み上げタイプ（拡大）", "file": "Pentacles03.png", "msgs": ["現実の一歩が運を強くする。", "整えるほど豊かさが入りやすい。", "小さな積み重ねが実りに。", "今日のテーマは「拡大」。小さく整えるほど進む。"], "tendency": ["積み上げで強くなるタイプ。", "確認が増えると不安が増える。", "“整える”が最短。", "「拡大」が続く時は“今のテーマ”が強い状態。"], "use": ["片付けを1箇所。", "支出/在庫を1つ整える。", "小さな積み上げを1つ。", "キーワード「拡大」を今日1回だけ実行。"]}, {"id": "pentacles_04", "arcana": "Minor", "suit": "Pentacles", "name": "ペンタクル04", "keywords": "現実 / 豊かさ / 安定", "typeName": "あなたのテーマ：現実積み上げタイプ（安定）", "file": "Pentacles04.png", "msgs": ["現実の一歩が運を強くする。", "整えるほど豊かさが入りやすい。", "小さな積み重ねが実りに。", "今日のテーマは「安定」。小さく整えるほど進む。"], "tendency": ["積み上げで強くなるタイプ。", "確認が増えると不安が増える。", "“整える”が最短。", "「安定」が続く時は“今のテーマ”が強い状態。"], "use": ["片付けを1箇所。", "支出/在庫を1つ整える。", "小さな積み上げを1つ。", "キーワード「安定」を今日1回だけ実行。"]}, {"id": "pentacles_05", "arcana": "Minor", "suit": "Pentacles", "name": "ペンタクル05", "keywords": "現実 / 豊かさ / 変化", "typeName": "あなたのテーマ：現実積み上げタイプ（変化）", "file": "Pentacles05.png", "msgs": ["現実の一歩が運を強くする。", "整えるほど豊かさが入りやすい。", "小さな積み重ねが実りに。", "今日のテーマは「変化」。小さく整えるほど進む。"], "tendency": ["積み上げで強くなるタイプ。", "確認が増えると不安が増える。", "“整える”が最短。", "「変化」が続く時は“今のテーマ”が強い状態。"], "use": ["片付けを1箇所。", "支出/在庫を1つ整える。", "小さな積み上げを1つ。", "キーワード「変化」を今日1回だけ実行。"]}, {"id": "pentacles_06", "arcana": "Minor", "suit": "Pentacles", "name": "ペンタクル06", "keywords": "現実 / 豊かさ / 前進", "typeName": "あなたのテーマ：現実積み上げタイプ（前進）", "file": "Pentacles06.png", "msgs": ["現実の一歩が運を強くする。", "整えるほど豊かさが入りやすい。", "小さな積み重ねが実りに。", "今日のテーマは「前進」。小さく整えるほど進む。"], "tendency": ["積み上げで強くなるタイプ。", "確認が増えると不安が増える。", "“整える”が最短。", "「前進」が続く時は“今のテーマ”が強い状態。"], "use": ["片付けを1箇所。", "支出/在庫を1つ整える。", "小さな積み上げを1つ。", "キーワード「前進」を今日1回だけ実行。"]}, {"id": "pentacles_07", "arcana": "Minor", "suit": "Pentacles", "name": "ペンタクル07", "keywords": "現実 / 豊かさ / 検証", "typeName": "あなたのテーマ：現実積み上げタイプ（検証）", "file": "Pentacles07.png", "msgs": ["現実の一歩が運を強くする。", "整えるほど豊かさが入りやすい。", "小さな積み重ねが実りに。", "今日のテーマは「検証」。小さく整えるほど進む。"], "tendency": ["積み上げで強くなるタイプ。", "確認が増えると不安が増える。", "“整える”が最短。", "「検証」が続く時は“今のテーマ”が強い状態。"], "use": ["片付けを1箇所。", "支出/在庫を1つ整える。", "小さな積み上げを1つ。", "キーワード「検証」を今日1回だけ実行。"]}, {"id": "pentacles_08", "arcana": "Minor", "suit": "Pentacles", "name": "ペンタクル08", "keywords": "現実 / 豊かさ / 加速", "typeName": "あなたのテーマ：現実積み上げタイプ（加速）", "file": "Pentacles08.png", "msgs": ["現実の一歩が運を強くする。", "整えるほど豊かさが入りやすい。", "小さな積み重ねが実りに。", "今日のテーマは「加速」。小さく整えるほど進む。"], "tendency": ["積み上げで強くなるタイプ。", "確認が増えると不安が増える。", "“整える”が最短。", "「加速」が続く時は“今のテーマ”が強い状態。"], "use": ["片付けを1箇所。", "支出/在庫を1つ整える。", "小さな積み上げを1つ。", "キーワード「加速」を今日1回だけ実行。"]}, {"id": "pentacles_09", "arcana": "Minor", "suit": "Pentacles", "name": "ペンタクル09", "keywords": "現実 / 豊かさ / 成熟", "typeName": "あなたのテーマ：現実積み上げタイプ（成熟）", "file": "Pentacles09.png", "msgs": ["現実の一歩が運を強くする。", "整えるほど豊かさが入りやすい。", "小さな積み重ねが実りに。", "今日のテーマは「成熟」。小さく整えるほど進む。"], "tendency": ["積み上げで強くなるタイプ。", "確認が増えると不安が増える。", "“整える”が最短。", "「成熟」が続く時は“今のテーマ”が強い状態。"], "use": ["片付けを1箇所。", "支出/在庫を1つ整える。", "小さな積み上げを1つ。", "キーワード「成熟」を今日1回だけ実行。"]}, {"id": "pentacles_10", "arcana": "Minor", "suit": "Pentacles", "name": "ペンタクル10", "keywords": "現実 / 豊かさ / 完了", "typeName": "あなたのテーマ：現実積み上げタイプ（完了）", "file": "Pentacles10.png", "msgs": ["現実の一歩が運を強くする。", "整えるほど豊かさが入りやすい。", "小さな積み重ねが実りに。", "今日のテーマは「完了」。小さく整えるほど進む。"], "tendency": ["積み上げで強くなるタイプ。", "確認が増えると不安が増える。", "“整える”が最短。", "「完了」が続く時は“今のテーマ”が強い状態。"], "use": ["片付けを1箇所。", "支出/在庫を1つ整える。", "小さな積み上げを1つ。", "キーワード「完了」を今日1回だけ実行。"]}, {"id": "pentacles_11", "arcana": "Minor", "suit": "Pentacles", "name": "ペンタクル11", "keywords": "現実 / 豊かさ / 芽生え", "typeName": "あなたのテーマ：現実積み上げタイプ（芽生え）", "file": "Pentacles11.png", "msgs": ["現実の一歩が運を強くする。", "整えるほど豊かさが入りやすい。", "小さな積み重ねが実りに。", "今日のテーマは「芽生え」。小さく整えるほど進む。"], "tendency": ["積み上げで強くなるタイプ。", "確認が増えると不安が増える。", "“整える”が最短。", "「芽生え」が続く時は“今のテーマ”が強い状態。"], "use": ["片付けを1箇所。", "支出/在庫を1つ整える。", "小さな積み上げを1つ。", "キーワード「芽生え」を今日1回だけ実行。"]}, {"id": "pentacles_12", "arcana": "Minor", "suit": "Pentacles", "name": "ペンタクル12", "keywords": "現実 / 豊かさ / 推進", "typeName": "あなたのテーマ：現実積み上げタイプ（推進）", "file": "Pentacles12.png", "msgs": ["現実の一歩が運を強くする。", "整えるほど豊かさが入りやすい。", "小さな積み重ねが実りに。", "今日のテーマは「推進」。小さく整えるほど進む。"], "tendency": ["積み上げで強くなるタイプ。", "確認が増えると不安が増える。", "“整える”が最短。", "「推進」が続く時は“今のテーマ”が強い状態。"], "use": ["片付けを1箇所。", "支出/在庫を1つ整える。", "小さな積み上げを1つ。", "キーワード「推進」を今日1回だけ実行。"]}, {"id": "pentacles_13", "arcana": "Minor", "suit": "Pentacles", "name": "ペンタクル13", "keywords": "現実 / 豊かさ / 受容", "typeName": "あなたのテーマ：現実積み上げタイプ（受容）", "file": "Pentacles13.png", "msgs": ["現実の一歩が運を強くする。", "整えるほど豊かさが入りやすい。", "小さな積み重ねが実りに。", "今日のテーマは「受容」。小さく整えるほど進む。"], "tendency": ["積み上げで強くなるタイプ。", "確認が増えると不安が増える。", "“整える”が最短。", "「受容」が続く時は“今のテーマ”が強い状態。"], "use": ["片付けを1箇所。", "支出/在庫を1つ整える。", "小さな積み上げを1つ。", "キーワード「受容」を今日1回だけ実行。"]}, {"id": "pentacles_14", "arcana": "Minor", "suit": "Pentacles", "name": "ペンタクル14", "keywords": "現実 / 豊かさ / 統率", "typeName": "あなたのテーマ：現実積み上げタイプ（統率）", "file": "Pentacles14.png", "msgs": ["現実の一歩が運を強くする。", "整えるほど豊かさが入りやすい。", "小さな積み重ねが実りに。", "今日のテーマは「統率」。小さく整えるほど進む。"], "tendency": ["積み上げで強くなるタイプ。", "確認が増えると不安が増える。", "“整える”が最短。", "「統率」が続く時は“今のテーマ”が強い状態。"], "use": ["片付けを1箇所。", "支出/在庫を1つ整える。", "小さな積み上げを1つ。", "キーワード「統率」を今日1回だけ実行。"]}];
+
+// 恋愛特化：カード別メッセージ（最初は共通型＋必要なカードだけ個別上書きでもOK）
+const LOVE_BASE = {
+  state: "恋が動く前の“整い”が始まっています。",
+  tip: "今日は「相手を動かす」より「自分の安心」を先に整えてみてください。",
+  cta: "もし今夜、不安が強いなら“縁結び＋関係フィールド調整”で静かに整えることもできます。"
+};
+const MINOR_LOVE = {
+  "cups_ace": {
+    state: "気持ちは動く。連絡の“入口”が開く。",
+    tip: "短く、温度のある一言だけ送る。",
+    cta: "複雑恋愛ほど「軽い嬉しさ」が突破口。"
+  },
+  "swords_4": {
+    state: "休止・距離調整。返信が遅いのは“回復時間”。",
+    tip: "追わず、生活を整える（睡眠/食事/予定）。",
+    cta: "不倫・ツインは「一旦休む」が正解の時がある。"
+  }
+};
+// card.file（例: "major_00_fool.jpg"）をキーにして個別上書きできます
+const LOVE_OVERRIDES = {
+  // 例：愚者
+  "major_00_fool.jpg": {
+    state: "恋は“新しい流れ”に入りかけています。",
+    tip: "追いすぎず、軽い一言で“楽しい空気”を先に作るのが鍵。",
+    cta: "既読・返信の波に揺れやすい時は、関係の場を整えてから言葉を出すと安定します。"
+  },
+  // 例：恋人
+  "major_06_lovers.jpg": {
+    state: "気持ちが通じるルートが開いています。",
+    tip: "白黒を急がず“会える形・話せる形”を一つだけ具体化して。",
+    cta: "迷いが出る時は、縁を強めるより先に“選び直せる心”を作るのがおすすめ。"
+  },
+  // 例：塔（不安・事件対応にも強い）
+  "major_16_tower.jpg": {
+    state: "一度揺れて、関係が“本音”に向かうサインです。",
+    tip: "反射で送らず、まず深呼吸3回→短文で整えるのが正解。",
+    cta: "急な出来事の後は“場のノイズ”が残りやすいので、関係フィールド調整が相性◎。"
+  }
+};
+
+function loveMsgFor(card){
+  return Object.assign({}, LOVE_BASE, LOVE_OVERRIDES[card.file] || {});
+}
+
+function pick3(arr){
+  const pool=[...arr]; const out=[];
+  for(let i=0;i<3;i++){ const idx=Math.floor(Math.random()*pool.length); out.push(pool.splice(idx,1)[0]); }
+  return out;
+}
+function pickRandom(a){return a[Math.floor(Math.random()*a.length)]}
+const img = (file)=> `./cards/${file}`;
+
+const host = document.getElementById('cards');
+const readingBox = document.getElementById('reading');
+const retryBtn = document.getElementById('retry');
+const copyLineBtn = document.getElementById('copyLine');
+
+const messageEl = document.getElementById('message');
+const useHint = document.getElementById('useHint');
+const pickedName = document.getElementById('pickedName');
+const pickedKw = document.getElementById('pickedKw');
+const pickedType = document.getElementById('pickedType');
+const pickedArcana = document.getElementById('pickedArcana');
+
+const tendency1 = document.getElementById('tendency1');
+const tendency2 = document.getElementById('tendency2');
+const use1 = document.getElementById('use1');
+const use2 = document.getElementById('use2');
+const lineText = document.getElementById('lineText');
+
+let locked=false;
+let shown=[];
+
+function preloadShown(){
+  shown.forEach(c=>{
+    const im = new Image();
+    im.src = img(c.file);
+  });
+}
+
+function renderCards(){
+  host.innerHTML = '';
+  locked=false;
+  shown = pick3(DECK);
+ preloadShown();
+  readingBox.classList.remove('show');
+
+  pickedKw.style.display="none";
+  pickedArcana.style.display="none";
+  pickedType.style.display="none";
+
+  messageEl.textContent="";
+  useHint.textContent="—";
+  tendency1.textContent="—"; tendency2.textContent="—";
+  use1.textContent="—"; use2.textContent="—";
+  lineText.value="";
+
+  shown.forEach((card)=>{
+    const el = document.createElement('button');
+    el.className='card';
+    el.type='button';
+    el.setAttribute('data-id', card.id);
+    el.setAttribute('aria-label', card.name);
+
+    el.innerHTML = `
+      <div class="flip">
+        <div class="face back" aria-hidden="true"></div>
+        <div class="face front" style="background-image:url('${img(card.file)}')" aria-hidden="true"></div>
+      </div>
+    `;
+    host.appendChild(el);
+  });
+
+  Array.from(host.querySelectorAll('.card')).forEach(btn=>{
+    btn.addEventListener('click', onPick);
+    btn.addEventListener('keydown', (ev)=>{ if(ev.key==='Enter'||ev.key===' '){ ev.preventDefault(); btn.click(); } });
+  });
+}
+
+function onPick(e){
+  if(locked) return;
+  const picked = e.currentTarget;
+  const id = picked.getAttribute('data-id');
+  const card = shown.find(c=>c.id===id);
+  if(!card) return;
+
+  locked = true;
+
+  document.querySelectorAll('.card').forEach(btn=>{
+    if(btn!==picked){
+      btn.classList.add('disabled');
+      btn.setAttribute('aria-disabled','true');
+      btn.tabIndex=-1;
+    }
+  });
+
+  picked.classList.add('flipped');
+
+  const msg = pickRandom(card.msgs);
+  const t1 = pickRandom(card.tendency || ["今は整え直しのタイミング。"]);
+  const t2src = (card.tendency||[]).filter(x=>x!==t1);
+  const t2 = t2src.length ? pickRandom(t2src) : "";
+  const u1v = pickRandom(card.use || ["今日の行動を1つに絞って実行。"]);
+  const u2src = (card.use||[]).filter(x=>x!==u1v);
+  const u2v = u2src.length ? pickRandom(u2src) : "";
+
+  pickedName.textContent = card.name;
+  pickedKw.textContent = card.keywords;
+  pickedType.textContent = card.typeName || "あなたのテーマ：—";
+  pickedArcana.textContent = (card.arcana==="Major") ? "大アルカナ" : "小アルカナ";
+
+  pickedKw.style.display="inline-block";
+  pickedType.style.display="inline-block";
+  pickedArcana.style.display="inline-block";
+
+  setTimeout(()=>{
+    messageEl.textContent = msg;
+    useHint.textContent = "今日の整え：この中から1つだけ選んでOK。";
+    tendency1.textContent = t1;
+    tendency2.textContent = t2 || "同じカードが増えるほど“今のテーマ”が強いサイン。";
+    use1.textContent = u1v;
+    use2.textContent = u2v || "できたら、最後に深呼吸を1回。";
+
+    const line =
+"【今日のワンカード】\n" +
+"card_id:" + card.id + "\n" +
+"card_name:" + card.name + "\n" +
+"arcana:" + (pickedArcana.textContent || "") + "\n\n" +
+
+      card.name + "（" + pickedArcana.textContent + "）\n" +
+      "キーワード：" + card.keywords + "\n" +
+      (card.typeName || "") + "\n\n" +
+      "◆メッセージ\n" + msg + "\n\n" +
+      "◆活かし方（1つでOK）\n" +
+      "・" + u1v + "\n" +
+      (u2v ? "・" + u2v + "\n\n" : "\n") +
+      "（このまま送信すると、あなた用の整えワンポイントが届きます）";
+    lineText.value = line;
+
+    readingBox.classList.add('show');
+    readingBox.scrollIntoView({behavior:"smooth", block:"start"});
+  }, 420);
+}
+
+retryBtn.addEventListener('click', ()=> renderCards());
+
+copyLineBtn.addEventListener('click', async ()=>{
+  const text = lineText.value || "";
+  try {
+    await navigator.clipboard.writeText(text);
+    copyLineBtn.textContent = "コピーしました";
+    setTimeout(()=> copyLineBtn.textContent="LINE文をコピー", 1200);
+  } catch(e) {
+    // フォールバック
+    lineText.focus();
+    lineText.select();
+    try { document.execCommand('copy'); } catch(_) {}
+    alert("自動コピーできない環境です。表示された文章を選択してコピーしてください。");
+  }
+});
+
+renderCards();
+</script>
+</body>
+</html>
