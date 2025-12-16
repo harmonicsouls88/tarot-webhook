@@ -172,14 +172,33 @@ textarea{width:100%; min-height:92px; border-radius:12px; border:1px solid rgba(
       </div>
 
       <div class="lineGuide">
-        <strong>この結果をLINEで送ると…</strong>
-        <p style="margin:0; opacity:.9; font-size:13px; line-height:1.7;">
-          あなたのカードに合わせた<strong>「整えワンポイント」</strong>を自動で返信します。<br/>
-          そのままコピペして送ってください（1回でOK）。
-        </p>
+  <p style="margin:0 0 10px; font-size:14px; line-height:1.9;">
+    ここまで読んでくださってありがとうございます🌿
+  </p>
 
-        <p class="copyNote">LINEに送る用（コピペ）</p>
-        <textarea id="lineText" readonly></textarea>
+  <p style="margin:0 0 10px; font-size:14px; line-height:1.9;">
+    このカードは、<br>
+    <strong>「今のあなたが、ちゃんと整ってきている」</strong><br>
+    というサインでもあります。
+  </p>
+
+  <p style="margin:0 0 12px; font-size:14px; line-height:1.9;">
+    もしよければ、<br>
+    この結果をそのままLINEに送ってください。
+  </p>
+	<p style="margin:0 0 16px; font-size:13px; line-height:1.8; opacity:.9;">
+  	※今はここまでで大丈夫、と感じたら送らなくても問題ありません🌙
+	</p>
+
+  <p style="margin:0 0 16px; font-size:14px; line-height:1.9;">
+    あなたのカードに合わせた<br>
+    <strong>“整えの続きを”</strong><br>
+    自動でお届けします。
+  </p>
+
+  <p class="copyNote">LINEに送る用（コピペ）</p>
+  <textarea id="lineText" readonly></textarea>
+</div>
 
         <div class="actions">
           <button id="retry" class="btn">もう一度占う</button>
@@ -356,21 +375,10 @@ function onPick(e){
     use1.textContent = u1v;
     use2.textContent = u2v || "できたら、最後に深呼吸を1回。";
 
-    const line =
-"【今日のワンカード】\n" +
-"card_id:" + card.id + "\n" +
-"card_name:" + card.name + "\n" +
-"arcana:" + (pickedArcana.textContent || "") + "\n\n" +
-
-      card.name + "（" + pickedArcana.textContent + "）\n" +
-      "キーワード：" + card.keywords + "\n" +
-      (card.typeName || "") + "\n\n" +
-      "◆メッセージ\n" + msg + "\n\n" +
-      "◆活かし方（1つでOK）\n" +
-      "・" + u1v + "\n" +
-      (u2v ? "・" + u2v + "\n\n" : "\n") +
-      "（このまま送信すると、あなた用の整えワンポイントが届きます）";
-    lineText.value = line;
+const line =
+"#整え続き\n" +
+"card_id:" + card.id;
+lineText.value = line;
 
     readingBox.classList.add('show');
     readingBox.scrollIntoView({behavior:"smooth", block:"start"});
@@ -398,3 +406,4 @@ renderCards();
 </script>
 </body>
 </html>
+
