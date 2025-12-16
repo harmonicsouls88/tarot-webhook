@@ -35,6 +35,57 @@ export default function handler(req, res) {
   // card_id を本文から抜く（例: card_id:major_16）
   const cardId = extractCardId(incomingText) || (q.card_id || q.cardId || body.card_id || body.cardId || "");
 
+export default function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.status(200).end();
+
+  if (req.method === "GET") {
+    return res.status(200).json({ ok: true, message: "tarot-love webhook alive" });
+  }
+  if (req.method !== "POST") {
+    return res.status(405).json({ ok: false, error: "POST only" });
+  }
+
+  const body = req.body || {};
+  const uid = body.uid || "";
+  const name = body.user_data?.linename || body.user_data?.snsname || "あなた";
+
+  // ✅ ProLineフォームの回答（ここにコピペさせる）
+  const pasted = body.form_data?.["form1-1"] || ""; // ←ここが鍵
+
+  // pasted 例:
+  // "#整え続き\ncard_id:major_16"
+  const m = String(pasted).match(/card_id\s*[:=]\s*([a-z0-9_]+)/i);
+  const cardId = m?.[1] || "";
+
+  if (!cardId) {
+    return res.status(200).json({
+      ok: true,
+      reply_text: "カード情報が見つかりませんでした🙏\n（フォームに貼り付けた文章に card_id:xxx が入っているか確認してね）"
+    });
+  }
+
+  // ✅ ここに「カード別辞書」を置く
+  const LOVE = {
+    "major_19": "🌞太陽\n今の恋：堂々と受け取っていい流れ。隠すほど停滞します。\n今日の整え：嬉しかった事実だけを短文で伝える。\nひとこと：気持ちは出してOK。関係を壊すカードではありません。",
+    "major_18": "🌙月\n今の恋：不安が現実を歪めやすい時期。誤解が増えがち。\n今日の整え：連絡は“確認”ではなく“共有”にする。\nひとこと：試すLINEは逆効果。整えるだけで流れが戻ります。"
+    // ここに増やしていく
+  };
+
+  const text =
+    `受け取ってくれてありがとうございます🌿\n${name}さんのカードに合わせて、整えの続きをお届けします。\n\n` +
+    (LOVE[cardId] || `（未登録のカードです）\ncard_id:${cardId}\n※辞書に追加してください`);
+
+  return res.status(200).json({
+    ok: true,
+    reply_text: text,
+    uid,
+    card_id: cardId
+  });
+}
+  
   // 疎通確認用（ブラウザで開いた時に分かりやすい）
   if (req.method === "GET") {
     return res.status(200).json({
