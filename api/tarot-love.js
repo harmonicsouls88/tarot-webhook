@@ -1,24 +1,46 @@
 // api/tarot-love.ts
-import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 function pickCardId(pasted: string) {
   const m = pasted.match(/card_id\s*:\s*([A-Za-z0-9_]+)/);
   return m?.[1] ?? "";
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // ProLineは form-urlencoded で来ることが多いので req.body が object になってる想定
+/** ProLine で form-urlencoded / text で来ても拾えるようにする */
+function getBodyValue(req: any, key: string): string {
+  const b = req.body;
+  if (!b) return "";
+
+  // すでに object の場合
+  if (typeof b === "object") {
+    const v = b[key];
+    return typeof v === "string" ? v : "";
+  }
+
+  // string の場合（form-urlencoded など）
+  if (typeof b === "string") {
+    try {
+      const params = new URLSearchParams(b);
+      return params.get(key) ?? "";
+    } catch {
+      return "";
+    }
+  }
+
+  return "";
+}
+
+export default async function handler(req: any, res: any) {
   const uid =
     (req.body?.uid as string) ||
     (req.query?.uid as string) ||
+    getBodyValue(req, "uid") ||
     "";
 
-  // pastedの取り方：query → form11-1 → pasted の順で拾う（保険多め）
   const pasted =
     (req.query?.pasted as string) ||
-    (req.body?.["form11-1"] as string) ||
-    (req.body?.["form12-1"] as string) ||
-    (req.body?.pasted as string) ||
+    getBodyValue(req, "form11-1") ||
+    getBodyValue(req, "form12-1") ||
+    getBodyValue(req, "pasted") ||
     "";
 
   const cardId = pickCardId(pasted);
