@@ -1,4 +1,6 @@
 // pages/api/tarot-love.js
+console.log("ENV check PROLINE_FORM12_ID:", process.env.PROLINE_FORM12_ID ? "OK" : "NG");
+
 export default async function handler(req, res) {
   try {
     // ProLine→Vercelはサーバ間POSTなのでCORSは基本不要（残してもOK）
