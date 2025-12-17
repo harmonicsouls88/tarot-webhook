@@ -20,7 +20,7 @@ export default async function handler(req, res) {
     const name = body.user_data?.linename || body.user_data?.snsname || "あなた";
 
     // ✅ ProLineフォーム(form11)回答本文（あなたのpayload形に合わせてここが最重要）
-    const pasted = body.form_data?.["form11-1"] || ""; // ←ここが鍵
+    const pasted = body.form_data?.["form11-1"] || body.form_data?.["form1-1"] || "";
     const cardId = extractCardId(pasted);
 
     console.log("uid:", uid);
