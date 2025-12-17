@@ -1,120 +1,122 @@
-// pages/api/tarot-love.js
-console.log("ENV check PROLINE_FORM12_ID:", process.env.PROLINE_FORM12_ID ? "OK" : "NG");
+// api/tarot-love.js
+// ProLine Form11 -> Vercel -> ProLine Form12(form12-1) writeback -> beacon -> scenario "返信本文"
 
 export default async function handler(req, res) {
   try {
-    // ProLine→Vercelはサーバ間POSTなのでCORSは基本不要（残してもOK）
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-    if (req.method === "OPTIONS") return res.status(200).end();
+    const FM_BASE = (process.env.PROLINE_FM_BASE || "https://autosns.me/fm").replace(/\/$/, "");
+    const FORM12_ID = process.env.PROLINE_FORM12_ID;
+    const FORM12_FIELD = process.env.PROLINE_FORM12_FIELD || "form12-1";
+    const BEACON_ID = process.env.PROLINE_BEACON_ID;
 
-    // 疎通確認
-    if (req.method === "GET") {
-      return res.status(200).json({ ok: true, message: "tarot-love alive" });
+    if (!FORM12_ID) throw new Error("Missing env PROLINE_FORM12_ID");
+    if (!BEACON_ID) throw new Error("Missing env PROLINE_BEACON_ID");
+
+    // ProLineはフォーム送信時に JSON をPOSTしてくる想定
+    let body = req.body;
+    if (typeof body === "string") {
+      try { body = JSON.parse(body); } catch { /* ignore */ }
     }
-    if (req.method !== "POST") {
-      return res.status(405).json({ ok: false, error: "POST only" });
-    }
 
-    const body = req.body || {};
-    const uid = body.uid || "";
-    const name = body.user_data?.linename || body.user_data?.snsname || "あなた";
+    const uid = body?.uid || body?.user_data?.uid || body?.user?.uid;
+    const formData = body?.form_data || {};
+    // form11 の入力はだいたい "form11-1" に入る（あなたの画面どおり）
+    const pasted = formData["form11-1"] || formData["form11_1"] || body?.pasted || "";
 
-    // ✅ ProLineフォーム(form11)回答本文（あなたのpayload形に合わせてここが最重要）
-    const pasted = body.form_data?.["form11-1"] || body.form_data?.["form1-1"] || "";
-    const cardId = extractCardId(pasted);
-
-    console.log("uid:", uid);
-    console.log("pasted:", pasted);
-    console.log("cardId:", cardId);
+    // card_id を本文から抽出（ユーザーには見せない）
+    // 例: "card_id:major_19"
+    const cardMatch = String(pasted).match(/card_id\s*:\s*([a-z0-9_]+)/i);
+    const cardId = body?.cardId || body?.card_id || (cardMatch ? cardMatch[1] : "");
 
     if (!uid) {
-      return res.status(200).json({ ok: true, note: "no uid (ignore)" });
-    }
-    if (!cardId) {
-      // card_idがない場合でも、ユーザーにフォーム12へ返す文章を入れてシナリオ誘導するならここで作る
-      const fallback =
-        `カード情報が見つかりませんでした🙏\n\n` +
-        `送る文章にこの行が入っているか確認してください。\n` +
-        `card_id:major_19`;
-
-      await writeBackToProLineForm12(uid, name, fallback);
-      await moveScenarioByBeacon(uid);
-
-      return res.status(200).json({ ok: true });
+      return res.status(400).json({ ok: false, error: "uid is missing", received: body });
     }
 
-    // ✅ 返信文を生成（辞書はここに増やす）
-    const reply = buildReplyText(name, cardId);
+    // ===== ここが「生成」部分（今は簡易テンプレ。後でここにLLMを入れてOK） =====
+    const replyText = buildReplyText({ pasted, cardId });
 
-    // ✅ 1) form12 に返信文を書き込む（外部からフォーム登録）
-    await writeBackToProLineForm12(uid, name, reply);
+    // ===== ProLine form12 に書き戻す（form12-1 に全文）=====
+    const writeBackResult = await writeBackToProLineForm({
+      fmBase: FM_BASE,
+      formId: FORM12_ID,
+      uid,
+      fieldName: FORM12_FIELD,
+      value: replyText,
+    });
 
-    // ✅ 2) ビーコンで「返信本文」シナリオへ移動 → シナリオ内で [[form12-1]] を送信
-    await moveScenarioByBeacon(uid);
+    // ===== 返信本文シナリオへ移動（ビーコン）=====
+    const beaconResult = await callBeacon({ beaconId: BEACON_ID, uid });
 
-    return res.status(200).json({ ok: true });
+    return res.status(200).json({
+      ok: true,
+      uid,
+      cardId,
+      writeBack: writeBackResult,
+      beacon: beaconResult,
+    });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
 }
 
-// --- card_id 抜き出し（全角：や空白/改行にも強くする） ---
-function extractCardId(text) {
-  if (!text) return "";
-  const m = String(text).match(/card_id\s*[:：= ]\s*([a-zA-Z0-9_]+)/i);
-  return m ? m[1] : "";
+function buildReplyText({ pasted, cardId }) {
+  // cardIdが無いときでも、ユーザーにcard_idを要求しない（綺麗に）
+  // → 代わりに「もう一度ボタン」などの案内にするのがプロダクト的に正解
+  if (!cardId) {
+    return [
+      "🙏 今回はカード情報の取得に失敗しました。",
+      "",
+      "お手数ですが、もう一度「タロット結果」を送信してください。",
+      "（同じ内容でOKです）",
+    ].join("\n");
+  }
+
+  // ここはあなたの世界観に合わせて後でいくらでも差し替え可能
+  // まずは「整えワンポイント」系の短文テンプレを返す
+  return [
+    "🌿 今日の整えワンポイント",
+    "",
+    "今は、",
+    "・無理に動かそうとしないこと",
+    "・気持ちを整理すること",
+    "",
+    "この2つを意識するだけで、",
+    "関係の流れは静かに整っていきます。",
+    "",
+    "（必要な方には、この先の整え方もお届けできます）",
+  ].join("\n");
 }
 
-// --- 返信文生成（サンプル。辞書を増やしてOK） ---
-function buildReplyText(name, cardId) {
-  const LOVE = {
-    "major_19": "🌞太陽\n今の恋：堂々と受け取っていい流れ。\n今日の整え：嬉しかった事実だけ短文で。\nひとこと：気持ちは出してOK。",
-    "major_16": "⚡塔\n今の恋：揺れはリセットの合図。\n今日の整え：反射LINEを送らない。\nひとこと：壊れたように見えて、実は正位置。",
-    "swords_14": "🗡️ソード14（※仮）\n今の恋：整えるポイントが見えています。\n今日の整え：まず感情の棚卸し。\nひとこと：急がず、順序で整う。"
-  };
+async function writeBackToProLineForm({ fmBase, formId, uid, fieldName, value }) {
+  const url = `${fmBase}/${formId}`;
+  const form = new URLSearchParams();
+  form.set("uid", uid);
+  form.set("dataType", "json");
+  form.set(fieldName, value);
 
-  const body = LOVE[cardId] || `（未登録のカードです）\ncard_id:${cardId}\n※辞書に追加してください`;
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+    body: form.toString(),
+  });
 
-  return (
-    `受け取ってくれてありがとうございます🌿\n` +
-    `${name}さんのカードに合わせて、整えの続きをお届けします。\n\n` +
-    body
-  );
+  const text = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`writeBack failed: ${resp.status} ${text}`);
+  }
+  return { status: resp.status, body: safeJson(text) ?? text };
 }
 
-// --- ProLine: form12 に書き込む ---
-async function writeBackToProLineForm12(uid, name, replyText) {
-  const form12Id = process.env.PROLINE_FORM12_ID; // xBi34LzVvN
-  if (!form12Id) throw new Error("Missing env PROLINE_FORM12_ID");
-
-  // ProLine公式サンプル(sendform.php)が叩いているエンドポイントに合わせる
-  const url = `https://autosns.me/fm/${form12Id}`;
-
-  const params = new URLSearchParams();
-  params.set("uid", uid);
-  params.set("dataType", "json");
-  // form12-1 に返信文
-  params.set("form12-1", replyText);
-  // もし名前なども入れたいなら自由に追加可能（フォーム側に項目があれば）
-  // params.set("sei", name);
-
-  const r = await fetch(url, { method: "POST", body: params });
-  const t = await r.text();
-  console.log("writeBack status:", r.status, "body:", t);
-  if (!r.ok) throw new Error(`writeBack failed: ${r.status}`);
-}
-
-// --- ProLine: ビーコンでシナリオ移動（=返信本文へ） ---
-async function moveScenarioByBeacon(uid) {
-  const beaconId = process.env.PROLINE_BEACON_ID; // LG9OE8jlWD
-  if (!beaconId) throw new Error("Missing env PROLINE_BEACON_ID");
-
+async function callBeacon({ beaconId, uid }) {
   const url = `https://autosns.jp/api/call-beacon/${beaconId}/${encodeURIComponent(uid)}`;
-  const r = await fetch(url, { method: "GET" });
-  const t = await r.text();
-  console.log("beacon status:", r.status, "body:", t);
-  if (!r.ok) throw new Error(`beacon failed: ${r.status}`);
+  const resp = await fetch(url, { method: "GET" });
+  const text = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`beacon failed: ${resp.status} ${text}`);
+  }
+  return { status: resp.status, body: safeJson(text) ?? text };
+}
+
+function safeJson(s) {
+  try { return JSON.parse(s); } catch { return null; }
 }
