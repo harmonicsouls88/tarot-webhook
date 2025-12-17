@@ -1,63 +1,49 @@
-// api/tarot-love.js  (Vercel Serverless Functions 用 / CommonJS)
+// /api/tarot-love.js
+const { URLSearchParams } = require("url");
 
-function pickCardId(pasted) {
-  const m = String(pasted || "").match(/card_id\s*:\s*([A-Za-z0-9_]+)/);
+function extractCardId(text = "") {
+  // card_id:major_19 / card_id: wands_06 / card_id : wands_06 みたいな揺れ全部OK
+  const m = String(text).match(/card_id\s*[:：]\s*([A-Za-z0-9_]+)/i);
   return m ? m[1] : "";
 }
 
-async function readRawBody(req) {
-  return await new Promise((resolve, reject) => {
-    let data = "";
-    req.setEncoding("utf8");
-    req.on("data", (chunk) => (data += chunk));
-    req.on("end", () => resolve(data));
-    req.on("error", reject);
-  });
-}
+function parseBody(req) {
+  // Vercelでは req.body が string のことがある
+  if (!req.body) return {};
+  if (typeof req.body === "object") return req.body;
 
-function parseFormUrlEncoded(raw) {
-  const out = {};
-  if (!raw) return out;
-  for (const part of raw.split("&")) {
-    const [k, v] = part.split("=");
-    if (!k) continue;
-    const key = decodeURIComponent(k.replace(/\+/g, " "));
-    const val = decodeURIComponent((v || "").replace(/\+/g, " "));
-    out[key] = val;
-  }
-  return out;
+  const raw = String(req.body);
+  // urlencoded想定
+  const params = new URLSearchParams(raw);
+  const obj = {};
+  for (const [k, v] of params.entries()) obj[k] = v;
+  return obj;
 }
 
 module.exports = async (req, res) => {
-  try {
-    // 1) query
-    const q = req.query || {};
+  const q = req.query || {};
+  const body = parseBody(req);
 
-    // 2) body（Vercelがパースしてくれてる場合もある）
-    let body = req.body;
+  // まずuid
+  const uid = q.uid || body.uid || "";
 
-    // 3) bodyが無い/文字列のときは raw から復元（form-urlencoded対策）
-    if (!body || typeof body === "string") {
-      const raw = typeof body === "string" ? body : await readRawBody(req);
-      body = parseFormUrlEncoded(raw);
-    }
+  // pasted候補を総当たり（どのキーで来ても拾えるように）
+  const pasted =
+    q.pasted ||
+    body["form11-1"] ||
+    body["form12-1"] ||
+    body["form1-1"] ||     // ← ProLine側の内部フィールド名で来る保険
+    body.pasted ||
+    "";
 
-    const uid = body.uid || q.uid || "";
-    const pasted =
-      q.pasted ||
-      body["form11-1"] ||   // 今あなたが送ってるのは form11-1 なので最優先
-      body["form12-1"] ||
-      body.pasted ||
-      "";
+  const cardId = extractCardId(pasted);
 
-    const cardId = pickCardId(pasted);
+  // デバッグ用：どのキーで届いているか確認できる
+  console.log("[tarot-love] method:", req.method);
+  console.log("[tarot-love] uid:", uid);
+  console.log("[tarot-love] keys:", Object.keys(body));
+  console.log("[tarot-love] pasted:", pasted);
+  console.log("[tarot-love] cardId:", cardId);
 
-    console.log("[tarot-love] uid:", uid);
-    console.log("[tarot-love] cardId:", cardId);
-
-    return res.status(200).json({ ok: true, uid, cardId });
-  } catch (e) {
-    console.error("[tarot-love] error:", e);
-    return res.status(500).json({ ok: false, error: String(e) });
-  }
+  res.status(200).json({ ok: true, uid, cardId });
 };
