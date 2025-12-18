@@ -28,13 +28,14 @@ module.exports = async (req, res) => {
   const uid = q.uid || body.uid || "";
 
   // pasted候補を総当たり（どのキーで来ても拾えるように）
-  const pasted =
-    q.pasted ||
-    body["form11-1"] ||
-    body["form12-1"] ||
-    body["form1-1"] ||     // ← ProLine側の内部フィールド名で来る保険
-    body.pasted ||
-    "";
+ const pasted =
+  q.pasted ||
+  body["form_data[form11-1]"] || // ← ★これが本命
+  body["form_data[form12-1]"] || // 保険
+  body["form11-1"] ||            // 保険
+  body["form12-1"] ||            // 保険
+  body.pasted ||
+  "";
 
   const cardId = extractCardId(pasted);
 
