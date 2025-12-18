@@ -62,27 +62,23 @@ function loadCard(cardId) {
   return { card: null, from: candidates };
 }
 
-function buildCp21Url(uid) {
-  // あなたのcp21固定URL（id部分は今のまま）
+function buildCp21Url(uid, cardId) {
   const base = "https://l8x1uh5r.autosns.app/cp/bYnEXcWDaC";
-  return `${base}?uid=${encodeURIComponent(uid)}`;
+  const q = new URLSearchParams({ uid, card_id: cardId });
+  return `${base}?${q.toString()}`;
 }
 
 function buildTextForLine(cardId, card, uid) {
   // ① 大アルカナ：LINEは軽く、読むのはcp21
-  if (isMajor(cardId)) {
-    const light =
-      card?.line?.light ||
-      `🌿今日はこのテーマ：${card?.cp21?.focus || card?.focus || "整え"}。`;
+if (isMajor(cardId)) {
+  const light =
+    card?.line?.light ||
+    `🌿今日はこのテーマ：${card?.cp21?.focus || card?.focus || "整え"}。`;
 
-    const cp21 = buildCp21Url(uid);
+  const cp21 = buildCp21Url(uid, cardId);
 
-    return [
-      light,
-      "",
-      "読む（結果ページ）👇",
-      cp21,
-    ].join("\n");
+  return [light, "", "読む（結果ページ）👇", cp21].join("\n");
+}
   }
 
   // ② 小アルカナ：LINEで完結（実践メッセージ）
