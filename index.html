@@ -383,14 +383,6 @@ const line =
 "card_id:" + card.id;
 lineText.value = line;
 
-	  // form11へのURLを作ってボタンにセット
-const uid = new URLSearchParams(location.search).get("uid") || "";
-const form11Base = "https://l8x1uh5r.autosns.app/fm/Dj4HaOm6hI"; // ←あなたのform11
-const pasted = lineText.value; // "#整え続き\ncard_id:xxxx"
-const url = form11Base + "?uid=" + encodeURIComponent(uid) + "&pasted=" + encodeURIComponent(pasted);
-
-const btn = document.getElementById("toForm11");
-if (btn) btn.href = url;
 	  
     readingBox.classList.add('show');
     readingBox.scrollIntoView({behavior:"smooth", block:"start"});
