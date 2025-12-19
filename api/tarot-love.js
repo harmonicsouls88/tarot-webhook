@@ -64,37 +64,21 @@ function loadCard(cardId) {
 
 function buildCp21Url(uid, cardId) {
   const base = "https://l8x1uh5r.autosns.app/cp/bYnEXcWDaC";
-  const q = new URLSearchParams({ uid, card_id: cardId });
-  return `${base}?${q.toString()}`;
+  const p = new URLSearchParams();
+  if (uid) p.set("uid", uid);
+  if (cardId) p.set("card_id", cardId); // ★これが重要
+  return `${base}?${p.toString()}`;
 }
 
 function buildTextForLine(cardId, card, uid) {
   // ✅ 大アルカナ：cp21に出す本文を free1 に保存する前提で「本文」を返す
-  if (isMajor(cardId)) {
-    const no = cardId.replace("major_", ""); // "03"
-    const theme = (card.cp21 && card.cp21.focus) || card.focus || "整え";
-
-    const head = `🌿 ${no}｜${card.title || cardId}｜${theme}`;
-
-    const msg = (card.cp21 && card.cp21.message) || card.message || "";
-    const focus = (card.cp21 && card.cp21.focus) || card.focus || "";
-    const action = (card.cp21 && card.cp21.action) || card.action || "";
-    const closing = (card.cp21 && card.cp21.closing) || "今日はここまでで大丈夫です🌙";
-
-    return [
-      head,
-      "",
-      msg,
-      "",
-      "【意識すること】",
-      focus,
-      "",
-      "【今日の一手】",
-      action,
-      "",
-      closing
-    ].filter(Boolean).join("\n");
-  }
+  function buildCp21Url(uid, cardId) {
+  const base = "https://l8x1uh5r.autosns.app/cp/bYnEXcWDaC";
+  const p = new URLSearchParams();
+  if (uid) p.set("uid", uid);
+  if (cardId) p.set("card_id", cardId); // ★これが重要
+  return `${base}?${p.toString()}`;
+}
 
   // ✅ 小アルカナ：LINE完結（いまのまま）
   const full = card?.line?.full;
