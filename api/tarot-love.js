@@ -128,8 +128,9 @@ async function readBody(req) {
 // --------------------
 // ProLine writeback / beacon
 // --------------------
+// どの field に書くかを引数で渡せるようにする
 async function writeBackToProLine(uid, field, text) {
-  const formId = process.env.PROLINE_FORM12_ID; // fmのID
+  const formId = process.env.PROLINE_FORM12_ID; // fmの送信先（同じでOK）
   if (!formId) throw new Error("Missing env PROLINE_FORM12_ID");
   if (!field) throw new Error("Missing field");
 
@@ -146,15 +147,31 @@ async function writeBackToProLine(uid, field, text) {
   return { status: r.status, body: json };
 }
 
-async function callBeacon(uid) {
-  const beaconId = process.env.PROLINE_BEACON_ID;
-  if (!beaconId) throw new Error("Missing env PROLINE_BEACON_ID");
+// cp21用本文（free1）を作る：大/小どちらでもOKな形にする
+function buildTextForCp21(cardId, card) {
+  const t = card?.title || cardId;
 
-  const url = `https://autosns.jp/api/call-beacon/${beaconId}/${encodeURIComponent(uid)}`;
-  const r = await fetch(url, { method: "GET" });
-  const json = await r.json().catch(() => ({}));
-  return { status: r.status, body: json };
+  // できれば card.cp21 を優先
+  const msg = (card?.cp21?.message) || card?.message || "";
+  const focus = (card?.cp21?.focus) || card?.focus || "";
+  const action = (card?.cp21?.action) || card?.action || "";
+  const closing = (card?.cp21?.closing) || "今日はここまでで大丈夫です🌙";
+
+  return [
+    `🌿 ${t}`,
+    "",
+    msg,
+    "",
+    "【意識すること】",
+    focus,
+    "",
+    "【今日の一手】",
+    action,
+    "",
+    closing,
+  ].filter(Boolean).join("\n");
 }
+
 
 // --------------------
 // handler
@@ -204,25 +221,22 @@ module.exports = async (req, res) => {
     }
 
     const cp21Field = process.env.PROLINE_CP21_FIELD; // user_data[free1]
-    const lineField = process.env.PROLINE_LINE_FIELD; // user_data[free2]
+const lineField = process.env.PROLINE_LINE_FIELD; // user_data[free2]
 
-    if (isMajor(cardId)) {
-      // ① cp21本文 → free1
-      const cp21Text = buildTextForCp21(card);
-      const w1 = await writeBackToProLine(uid, cp21Field, cp21Text);
+// ① cp21用（free1）は常に書く
+const cp21Text = buildTextForCp21(cardId, card);
+const w1 = await writeBackToProLine(uid, cp21Field, cp21Text);
 
-      // ② LINE軽文 → free2
-      const lineText = buildLineForMajor(card, uid);
-      const w2 = await writeBackToProLine(uid, lineField, lineText);
+// ② LINE用（free2）はあなたの既存ロジック
+const lineText = buildTextForLine(cardId, card, uid);
+const w2 = await writeBackToProLine(uid, lineField, lineText);
 
-      // ③ Beacon（テンプレ側は [[free2]] を送るだけ）
-      const beacon = await callBeacon(uid);
+const beacon = await callBeacon(uid);
 
-      console.log("[tarot-love] major from:", from);
-      console.log("[tarot-love] major writeBack cp21:", w1.status, cp21Field);
-      console.log("[tarot-love] major writeBack line:", w2.status, lineField);
-      console.log("[tarot-love] beacon:", beacon.status);
-
+console.log("[tarot-love] writeBack cp21:", w1.status, cp21Field);
+console.log("[tarot-love] writeBack line:", w2.status, lineField);
+console.log("[tarot-love] beacon:", beacon.status);
+    
       return res.status(200).json({ ok: true, uid, cardId, major: true, w1, w2, beacon });
     } else {
       // 小アルカナ：LINE完結を free2 に
