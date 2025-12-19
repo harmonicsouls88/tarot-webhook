@@ -70,6 +70,7 @@ function buildcp21Url(uid, cardId) {
   return `${base}?${p.toString()}`;
 }
 
+
 function buildTextForLine(cardId, card, uid) {
   // ✅ 大アルカナ：cp21に出す本文を free1 に保存する前提で「本文」を返す
   function buildcp21Url(uid, cardId) {
@@ -100,13 +101,20 @@ function buildTextForLine(cardId, card, uid) {
   ].filter(Boolean).join("\n");
 }
 
-function buildTextForcp21(card) {
-  return `
-🌿 テスト書き込み成功
-
-カード名：${card.title}
-これは free1 に入っています。
-`;
+function buildTextForCp21(card) {
+  return [
+    `🌿 ${card.title}`,
+    "",
+    card.message || "",
+    "",
+    "【意識すること】",
+    card.focus || "",
+    "",
+    "【今日の一手】",
+    card.action || "",
+    "",
+    "今日はここまでで大丈夫です🌙",
+  ].join("\n");
 }
 
 async function readBody(req) {
