@@ -62,7 +62,7 @@ function loadCard(cardId) {
   return { card: null, from: candidates };
 }
 
-function buildCp21Url(uid, cardId) {
+function buildcp21Url(uid, cardId) {
   const base = "https://l8x1uh5r.autosns.app/cp/bYnEXcWDaC";
   const p = new URLSearchParams();
   if (uid) p.set("uid", uid);
@@ -72,7 +72,7 @@ function buildCp21Url(uid, cardId) {
 
 function buildTextForLine(cardId, card, uid) {
   // ✅ 大アルカナ：cp21に出す本文を free1 に保存する前提で「本文」を返す
-  function buildCp21Url(uid, cardId) {
+  function buildcp21Url(uid, cardId) {
   const base = "https://l8x1uh5r.autosns.app/cp/bYnEXcWDaC";
   const p = new URLSearchParams();
   if (uid) p.set("uid", uid);
@@ -98,6 +98,15 @@ function buildTextForLine(cardId, card, uid) {
     focus,
     action,
   ].filter(Boolean).join("\n");
+}
+
+function buildTextForcp21(card) {
+  return `
+🌿 テスト書き込み成功
+
+カード名：${card.title}
+これは free1 に入っています。
+`;
 }
 
 async function readBody(req) {
