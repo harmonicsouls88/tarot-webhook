@@ -52,27 +52,26 @@ function buildTextForCp21(card) {
   return [
     `🌿 ${card.title || ""}`.trim(),
     "",
-    card.message || "",
+    String(card.message || ""),
     "",
     "【意識すること】",
-    card.focus || "",
+    String(card.focus || ""),
     "",
     "【今日の一手】",
-    card.action || "",
+    String(card.action || ""),
     "",
-    (card.closing || "今日はここまでで大丈夫です🌙"),
-  ].join("\n");
+    "今日はここまでで大丈夫です🌙",
+  ].join("\n").trim();
 }
 
 function buildTextForLine(cardId, card) {
-  // JSON側に line.full があるならそれを優先（既存互換）
   const full = card?.line?.full;
-  if (full) return String(full);
+  if (full) return full;
 
   const title = card?.title ? `【カード】${card.title}` : `【カード】${cardId}`;
   const msg = card?.message ? String(card.message) : "";
-  const focus = card?.focus ? `【意識すること】\n${card.focus}` : "";
-  const action = card?.action ? `【今日の一手】\n${card.action}` : "";
+  const focus = card?.focus ? `【意識すること】${card.focus}` : "";
+  const action = card?.action ? `【今日の一手】${card.action}` : "";
 
   return [
     "🌿 今日の整えワンポイント",
@@ -81,7 +80,6 @@ function buildTextForLine(cardId, card) {
     msg,
     "",
     focus,
-    "",
     action,
   ].filter(Boolean).join("\n");
 }
@@ -96,14 +94,19 @@ async function readBody(req) {
   return qs.parse(raw);
 }
 
+// --------------------
 // ProLineへ書き戻し（FM）
-async function writeBack(uid, patch) {
-  const formId = process.env.PROLINE_FORM12_ID;
-  const fmBase = process.env.PROLINE_FM_BASE || "https://autosns.me/fm";
+// ★重要：必ずあなたのサブドメイン側にPOSTする
+// --------------------
+async function writeBack(uid, payloadObj) {
+  const fmBase = process.env.PROLINE_FM_BASE;          // 例: https://l8x1uh5r.autosns.app/fm
+  const formId = process.env.PROLINE_FORM12_ID;        // 例: xBi34LzVvN
+  if (!fmBase) throw new Error("Missing env PROLINE_FM_BASE");
   if (!formId) throw new Error("Missing env PROLINE_FORM12_ID");
 
   const url = `${fmBase}/${formId}`;
-  const body = new URLSearchParams({ uid, ...patch }).toString();
+
+  const body = new URLSearchParams({ uid, ...payloadObj }).toString();
 
   const r = await fetch(url, {
     method: "POST",
@@ -115,7 +118,6 @@ async function writeBack(uid, patch) {
   return { status: r.status, body: json };
 }
 
-// Beaconで送信
 async function callBeacon(uid) {
   const beaconId = process.env.PROLINE_BEACON_ID;
   if (!beaconId) throw new Error("Missing env PROLINE_BEACON_ID");
@@ -131,13 +133,14 @@ async function callBeacon(uid) {
 // --------------------
 module.exports = async (req, res) => {
   try {
-    const body = await readBody(req);
+    const body = req.method === "GET" ? (req.query || {}) : await readBody(req);
 
     const uid = String(body?.uid || req.query?.uid || "");
-
     const pasted =
       String(body?.["form_data[form11-1]"] || "") ||
+      String(body?.["form_data[form12-1]"] || "") ||
       String(body?.["form11-1"] || "") ||
+      String(body?.["form12-1"] || "") ||
       String(body?.pasted || "");
 
     const cardId = pickCardId(pasted);
@@ -147,17 +150,13 @@ module.exports = async (req, res) => {
     console.log("[tarot-love] cardId:", cardId);
 
     if (!uid) return res.status(200).json({ ok: true, skipped: true, reason: "uid missing" });
-
     if (!cardId) {
       const fallback =
         "🙏 うまく読み取れませんでした。\n" +
         "フォームに貼り付ける文章に、この1行が入っているか確認してください👇\n" +
         "card_id:xxxx";
-
-      const lineField = process.env.PROLINE_LINE_FIELD || "free2";
-      await writeBack(uid, { [lineField]: fallback });
+      await writeBack(uid, { free2: fallback });
       await callBeacon(uid);
-
       return res.status(200).json({ ok: true, uid, cardId: "", fallback: true });
     }
 
@@ -168,40 +167,26 @@ module.exports = async (req, res) => {
       const notFound =
         "🙏 カード情報が見つかりませんでした。\n" +
         "もう一度「今日のワンカード」で引き直して、表示された文章をそのまま貼り付けてください🌿";
-
-      const lineField = process.env.PROLINE_LINE_FIELD || "free2";
-      await writeBack(uid, { [lineField]: notFound });
+      await writeBack(uid, { free2: notFound });
       await callBeacon(uid);
-
       return res.status(200).json({ ok: true, uid, cardId, found: false });
     }
 
     const cp21Text = buildTextForCp21(card);
     const lineText = buildTextForLine(cardId, card);
 
-    const cp21Field = process.env.PROLINE_CP21_FIELD || "free1";
-    const lineField = process.env.PROLINE_LINE_FIELD || "free2";
+    // 大アルカナは free1（cp21本文）もセット、通常は free2（LINE本文）だけでもOK
+    const payload = isMajor(cardId)
+      ? { free1: cp21Text, free2: lineText }
+      : { free2: lineText };
 
-    // 大アルカナでも小アルカナでも：
-    // free1=cp21用 / free2=LINE用 を両方更新（わかりやすく・事故が減る）
-    const writeBackResult = await writeBack(uid, {
-      [cp21Field]: cp21Text,
-      [lineField]: lineText,
-    });
-
-    console.log("[tarot-love] writeBack:", writeBackResult.status, { [cp21Field]: "(...)", [lineField]: "(...)" });
-
+    const writeBackRes = await writeBack(uid, payload);
     const beacon = await callBeacon(uid);
+
+    console.log("[tarot-love] writeBack:", writeBackRes.status, payload);
     console.log("[tarot-love] beacon:", beacon.status);
 
-    return res.status(200).json({
-      ok: true,
-      uid,
-      cardId,
-      updated: { cp21Field, lineField },
-      writeBack: writeBackResult,
-      beacon,
-    });
+    return res.status(200).json({ ok: true, uid, cardId, writeBackRes, beacon });
   } catch (e) {
     console.error("[tarot-love] ERROR:", e);
     return res.status(200).json({ ok: false, error: String(e?.message || e) });
