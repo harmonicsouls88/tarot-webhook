@@ -69,24 +69,37 @@ function buildCp21Url(uid, cardId) {
 }
 
 function buildTextForLine(cardId, card, uid) {
-  // ① 大アルカナ：LINEは軽く、読むのはcp21
-if (isMajor(cardId)) {
-  const light =
-    card?.line?.light ||
-    `🌿今日はこのテーマ：${card?.cp21?.focus || card?.focus || "整え"}。`;
+  // ✅ 大アルカナ：cp21に出す本文を free1 に保存する前提で「本文」を返す
+  if (isMajor(cardId)) {
+    const no = cardId.replace("major_", ""); // "03"
+    const theme = (card.cp21 && card.cp21.focus) || card.focus || "整え";
 
-  const cp21 = buildCp21Url(uid, cardId);
+    const head = `🌿 ${no}｜${card.title || cardId}｜${theme}`;
 
-  return [light, "", "読む（結果ページ）👇", cp21].join("\n");
-}
+    const msg = (card.cp21 && card.cp21.message) || card.message || "";
+    const focus = (card.cp21 && card.cp21.focus) || card.focus || "";
+    const action = (card.cp21 && card.cp21.action) || card.action || "";
+    const closing = (card.cp21 && card.cp21.closing) || "今日はここまでで大丈夫です🌙";
+
+    return [
+      head,
+      "",
+      msg,
+      "",
+      "【意識すること】",
+      focus,
+      "",
+      "【今日の一手】",
+      action,
+      "",
+      closing
+    ].filter(Boolean).join("\n");
   }
 
-  // ② 小アルカナ：LINEで完結（実践メッセージ）
+  // ✅ 小アルカナ：LINE完結（いまのまま）
   const full = card?.line?.full;
-
   if (full) return full;
 
-  // 互換：旧フォーマット（message/focus/action）から組み立て
   const title = card?.title ? `【カード】${card.title}` : `【カード】${cardId}`;
   const msg = card?.message ? String(card.message) : "";
   const focus = card?.focus ? `【意識すること】${card.focus}` : "";
