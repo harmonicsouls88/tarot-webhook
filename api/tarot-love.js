@@ -1,4 +1,24 @@
 // /api/tarot-love.js
+// - 小アルカナ：LINE完結（free2）
+// - 大アルカナ：cp21で読む（free1に長文を保存）＋LINEは軽い案内（free2）
+//
+// 必須ENV:
+//   PROLINE_FORM12_ID        : FMのID（例: xBi34LzVvN）
+//   PROLINE_FORM12_FIELD     : 既定の書き込み先（推奨: user_data[free2] = LINE吹き出し用）
+//   PROLINE_BEACON_ID        : Beacon ID
+//
+// 追加でおすすめ（任意）:
+//   PROLINE_CP21_FIELD       : cp21用の書き込み先（推奨: user_data[free1]）
+//   PROLINE_LINE_FIELD       : LINE用の書き込み先（推奨: user_data[free2]）
+//
+// cards配置（推奨）:
+//   /cards/major/major_00.json
+//   /cards/minor/swords_09.json
+// 互換:
+//   /cards/major_00.json
+//   /cards/swords_09.json
+//   /cards/swords/swords_09.json なども拾います
+
 const fs = require("fs");
 const path = require("path");
 const qs = require("querystring");
@@ -8,7 +28,9 @@ const qs = require("querystring");
 // --------------------
 function pickCardId(pasted) {
   if (!pasted) return "";
-  const m = String(pasted).match(/card_id\s*[:=]\s*([A-Za-z0-9_]+)/);
+  const s = String(pasted);
+  // card_id:major_20 / card_id=major_20 / card_id : major_20
+  const m = s.match(/card_id\s*[:=]\s*([A-Za-z0-9_]+)/);
   return m?.[1] ?? "";
 }
 
@@ -25,19 +47,18 @@ function detectSuit(cardId) {
 }
 
 function readJsonIfExists(p) {
+  if (!p) return null;
   if (!fs.existsSync(p)) return null;
   const raw = fs.readFileSync(p, "utf8");
-  return JSON.parse(raw);
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
 /**
  * cards 置き場の候補を複数試す（運用中でも崩れにくい）
- * 推奨構成:
- *   /cards/major/major_00.json
- *   /cards/minor/swords_09.json
- * もしくは
- *   /cards/major_00.json
- *   /cards/swords_09.json
  */
 function loadCard(cardId) {
   const cwd = process.cwd();
@@ -62,29 +83,19 @@ function loadCard(cardId) {
   return { card: null, from: candidates };
 }
 
-function buildcp21Url(uid, cardId) {
+// cp21 URL（uidだけでOKにするのが最強）
+function buildCp21Url(uid) {
   const base = "https://l8x1uh5r.autosns.app/cp/bYnEXcWDaC";
-  const p = new URLSearchParams();
-  if (uid) p.set("uid", uid);
-  if (cardId) p.set("card_id", cardId); // ★これが重要
-  return `${base}?${p.toString()}`;
+  return uid ? `${base}?uid=${encodeURIComponent(uid)}` : base;
 }
 
-
-function buildTextForLine(cardId, card, uid) {
-  // ✅ 大アルカナ：cp21に出す本文を free1 に保存する前提で「本文」を返す
-  function buildcp21Url(uid, cardId) {
-  const base = "https://l8x1uh5r.autosns.app/cp/bYnEXcWDaC";
-  const p = new URLSearchParams();
-  if (uid) p.set("uid", uid);
-  if (cardId) p.set("card_id", cardId); // ★これが重要
-  return `${base}?${p.toString()}`;
-}
-
-  // ✅ 小アルカナ：LINE完結（いまのまま）
+// 小アルカナ（LINE完結）
+function buildTextForLine(cardId, card) {
+  // 新フォーマットがあるなら最優先
   const full = card?.line?.full;
-  if (full) return full;
+  if (full) return String(full);
 
+  // 互換：旧フォーマットから組み立て
   const title = card?.title ? `【カード】${card.title}` : `【カード】${cardId}`;
   const msg = card?.message ? String(card.message) : "";
   const focus = card?.focus ? `【意識すること】${card.focus}` : "";
@@ -98,22 +109,63 @@ function buildTextForLine(cardId, card, uid) {
     "",
     focus,
     action,
-  ].filter(Boolean).join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
+// 大アルカナ（cp21で読む＝free1に保存する長文）
 function buildTextForCp21(card) {
+  // card.cp21 があるならそれを使う（推奨）
+  const t = card?.title || "";
+  const msg =
+    (card?.cp21 && card.cp21.message) ||
+    card?.message ||
+    "";
+  const focus =
+    (card?.cp21 && card.cp21.focus) ||
+    card?.focus ||
+    "";
+  const action =
+    (card?.cp21 && card.cp21.action) ||
+    card?.action ||
+    "";
+  const closing =
+    (card?.cp21 && card.cp21.closing) ||
+    "今日はここまでで大丈夫です🌙";
+
   return [
-    `🌿 ${card.title}`,
+    `🌿 ${t}`,
     "",
-    card.message || "",
+    String(msg).trim(),
     "",
     "【意識すること】",
-    card.focus || "",
+    String(focus).trim(),
     "",
     "【今日の一手】",
-    card.action || "",
+    String(action).trim(),
     "",
-    "今日はここまでで大丈夫です🌙",
+    String(closing).trim(),
+  ]
+    .filter((v) => v !== "")
+    .join("\n");
+}
+
+// 大アルカナ：LINEは軽い案内（free2）
+function buildMajorLineText(card, uid) {
+  const focus = card?.focus || (card?.cp21 && card.cp21.focus) || "整え";
+  const cp21 = buildCp21Url(uid);
+  const light =
+    card?.line?.light ||
+    `🌿今日はこのテーマ：${focus}`;
+
+  return [
+    light,
+    "",
+    "続き（読む）はこちら👇",
+    cp21,
+    "",
+    "※何度も引き直さなくて大丈夫。今日のテーマを1つだけ受け取ればOKです。",
   ].join("\n");
 }
 
@@ -130,11 +182,13 @@ async function readBody(req) {
 }
 
 // ProLineへ書き戻し（FM）
-async function writeBackToProLine(uid, text) {
-  const formId = process.env.PROLINE_FORM12_ID;      // 例: xBi34LzVvN
-  const field = process.env.PROLINE_FORM12_FIELD;   // 例: user_data[free1] など（あなたが使ってる差し込み先）
+async function writeBackToProLine(uid, text, fieldOverride) {
+  const formId = process.env.PROLINE_FORM12_ID;
+  const defaultField = process.env.PROLINE_FORM12_FIELD; // 既定（推奨：LINE用 free2）
+  const field = fieldOverride || defaultField;
+
   if (!formId) throw new Error("Missing env PROLINE_FORM12_ID");
-  if (!field) throw new Error("Missing env PROLINE_FORM12_FIELD");
+  if (!field) throw new Error("Missing env PROLINE_FORM12_FIELD (or override)");
 
   const url = `https://autosns.me/fm/${formId}`;
   const body = new URLSearchParams({
@@ -149,7 +203,7 @@ async function writeBackToProLine(uid, text) {
   });
 
   const json = await r.json().catch(() => ({}));
-  return { status: r.status, body: json };
+  return { status: r.status, body: json, field };
 }
 
 // Beaconで送信
@@ -175,24 +229,31 @@ module.exports = async (req, res) => {
       const cardId = pickCardId(pasted);
 
       const { card, from } = loadCard(cardId);
-      const text = card ? buildTextForLine(cardId, card, uid) : "";
 
-      console.log("[tarot-love] method: GET");
-      console.log("[tarot-love] uid:", uid);
-      console.log("[tarot-love] pasted:", pasted);
-      console.log("[tarot-love] cardId:", cardId);
-      console.log("[tarot-love] cardFrom:", from);
+      const preview = card
+        ? isMajor(cardId)
+          ? buildTextForCp21(card).slice(0, 140)
+          : buildTextForLine(cardId, card).slice(0, 140)
+        : "";
 
-      return res.status(200).json({ ok: true, uid, cardId, found: !!card, textPreview: text.slice(0, 120) });
+      return res.status(200).json({
+        ok: true,
+        uid,
+        pasted,
+        cardId,
+        found: !!card,
+        cardFrom: from,
+        preview,
+      });
     }
 
-    // POST（ProLine）
+    // POST（ProLine webhook）
     const body = await readBody(req);
 
     const uid = String(body?.uid || req.query?.uid || "");
-    const keys = Object.keys(body || {});
+
+    // ProLine形式: form_data[form11-1] など
     const pasted =
-      // ProLine形式: form_data[form11-1]
       String(body?.["form_data[form11-1]"] || "") ||
       String(body?.["form_data[form12-1]"] || "") ||
       // 互換
@@ -202,53 +263,86 @@ module.exports = async (req, res) => {
 
     const cardId = pickCardId(pasted);
 
-    console.log("[tarot-love] method:", req.method);
     console.log("[tarot-love] uid:", uid);
-    console.log("[tarot-love] keys:", keys);
     console.log("[tarot-love] pasted:", pasted);
     console.log("[tarot-love] cardId:", cardId);
 
     if (!uid) {
       return res.status(200).json({ ok: true, skipped: true, reason: "uid missing" });
     }
+
+    // どこに書くか（推奨）
+    const CP21_FIELD = process.env.PROLINE_CP21_FIELD || "user_data[free1]";
+    const LINE_FIELD = process.env.PROLINE_LINE_FIELD || process.env.PROLINE_FORM12_FIELD || "user_data[free2]";
+
     if (!cardId) {
-      // card_idが無い時は “案内文” を返す（たまみ語）
       const fallback =
         "🙏 うまく読み取れませんでした。\n" +
         "フォームに貼り付ける文章に、この1行が入っているか確認してください👇\n" +
         "card_id:xxxx";
 
-      await writeBackToProLine(uid, fallback);
-      await callBeacon(uid);
+      await writeBackToProLine(uid, fallback, LINE_FIELD);
+      const beacon = await callBeacon(uid);
 
-      return res.status(200).json({ ok: true, uid, cardId: "", fallback: true });
+      return res.status(200).json({ ok: true, uid, cardId: "", fallback: true, beacon });
     }
 
-    const { card } = loadCard(cardId);
+    const { card, from } = loadCard(cardId);
 
     if (!card) {
       const notFound =
         "🙏 カード情報が見つかりませんでした。\n" +
         "もう一度「今日のワンカード」で引き直して、表示された文章をそのまま貼り付けてください🌿";
-      await writeBackToProLine(uid, notFound);
-      await callBeacon(uid);
 
-      return res.status(200).json({ ok: true, uid, cardId, found: false });
+      await writeBackToProLine(uid, notFound, LINE_FIELD);
+      const beacon = await callBeacon(uid);
+
+      return res.status(200).json({ ok: true, uid, cardId, found: false, from, beacon });
     }
 
-    const text = buildTextForLine(cardId, card, uid);
+    // --------------------
+    // 大アルカナ：free1 にcp21本文、free2 に短文案内
+    // --------------------
+    if (isMajor(cardId)) {
+      const cp21Text = buildTextForCp21(card);
+      const lineText = buildMajorLineText(card, uid);
 
-    // 返信（ProLineへ書き戻し→Beacon送信）
-    const writeBack = await writeBackToProLine(uid, text);
+      const wb1 = await writeBackToProLine(uid, cp21Text, CP21_FIELD);
+      const wb2 = await writeBackToProLine(uid, lineText, LINE_FIELD);
+      const beacon = await callBeacon(uid);
+
+      console.log("[tarot-love] major writeBack cp21:", wb1.status, wb1.field);
+      console.log("[tarot-love] major writeBack line:", wb2.status, wb2.field);
+      console.log("[tarot-love] beacon:", beacon.status);
+
+      return res.status(200).json({
+        ok: true,
+        uid,
+        cardId,
+        major: true,
+        from,
+        writeBackCp21: wb1,
+        writeBackLine: wb2,
+        beacon,
+      });
+    }
+
+    // --------------------
+    // 小アルカナ：LINE完結（free2）
+    // --------------------
+    const lineText = buildTextForLine(cardId, card);
+    const writeBack = await writeBackToProLine(uid, lineText, LINE_FIELD);
     const beacon = await callBeacon(uid);
 
-    console.log("[tarot-love] writeBack status:", writeBack.status);
-    console.log("[tarot-love] beacon status:", beacon.status);
+    console.log("[tarot-love] minor writeBack:", writeBack.status, writeBack.field);
+    console.log("[tarot-love] beacon:", beacon.status);
 
     return res.status(200).json({
       ok: true,
       uid,
       cardId,
+      major: false,
+      from,
       writeBack,
       beacon,
     });
