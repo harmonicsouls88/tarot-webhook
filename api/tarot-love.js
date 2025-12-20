@@ -3,16 +3,12 @@ const fs = require("fs");
 const path = require("path");
 const qs = require("querystring");
 
-// ===== ProLine form12 の textarea name（あなたのHTML準拠）=====
-const FREE1_TXT_KEY = "txt[vgbwPXeBy6]"; // 長文
-const FREE2_TXT_KEY = "txt[I8onOXeYSh]"; // 短文
-
 // --------------------
 // helpers
 // --------------------
-function pickCardId(pasted) {
-  if (!pasted) return "";
-  const m = String(pasted).match(/card_id\s*[:=]\s*([A-Za-z0-9_]+)/);
+function pickCardId(text) {
+  if (!text) return "";
+  const m = String(text).match(/card_id\s*[:=]\s*([A-Za-z0-9_]+)/);
   return m?.[1] ?? "";
 }
 
@@ -101,35 +97,63 @@ async function readBody(req) {
   return qs.parse(raw);
 }
 
-// ✅ form12 の textarea name（あなたのHTMLから拾った“正”のキー）
-const FORM12_LONG_KEY  = "txt[vgbwPXeBy6]";   // 長文（タロット詳細）
-const FORM12_SHORT_KEY = "txt[I8onOXeYSh]";   // 短文（LINE吹き出し）
+/**
+ * ProLineから来た body の中で、card_id を含むテキストを自動で探す
+ * （どのフォーム項目に入って来ても拾えるようにする）
+ */
+function findTextContainingCardId(body) {
+  if (!body || typeof body !== "object") return "";
+
+  // よくあるキーを優先
+  const preferredKeys = [
+    "pasted",
+    "text",
+    "message",
+    "form_data[form11-1]",
+    "form11-1",
+    "form_data[form12-1]",
+    "form12-1",
+  ];
+
+  for (const k of preferredKeys) {
+    const v = body?.[k];
+    if (typeof v === "string" && v.includes("card_id")) return v;
+  }
+
+  // 全キー走査：どれかに card_id が入っていればそれを採用
+  for (const [k, v] of Object.entries(body)) {
+    if (typeof v === "string" && v.includes("card_id")) {
+      return v;
+    }
+  }
+
+  return "";
+}
 
 // --------------------
 // ProLineへ書き戻し（fm）
-// ★ txt[ID] で送る & dataType=json を付ける
+// ※ form12 の textarea name が txt[xxxxx] 形式なので、それに合わせる
 // --------------------
 async function writeBackToProLine(uid, payloadObj) {
-  const formId = process.env.PROLINE_FORM12_ID; // xBi34LzVvN が入ってる想定
+  const formId = process.env.PROLINE_FORM12_ID; // xBi34LzVvN
   if (!formId) throw new Error("Missing env PROLINE_FORM12_ID");
 
   const fmBase = (process.env.PROLINE_FM_BASE || "https://l8x1uh5r.autosns.app/fm").replace(/\/$/, "");
   const url = `${fmBase}/${formId}`;
 
-  const params = new URLSearchParams();
-  params.set("uid", uid);
+  // ✅ あなたの form HTML から確定した name
+  // 長文：txt[vgbwPXeBy6]
+  // 短文：txt[I8onOXeYSh]
+  const LONG_FIELD = process.env.PROLINE_FORM12_LONG_FIELD || "txt[vgbwPXeBy6]";
+  const SHORT_FIELD = process.env.PROLINE_FORM12_SHORT_FIELD || "txt[I8onOXeYSh]";
 
-  // ✅ PHPサンプルと同じ。これがあると“確認画面ありフォーム”でも通りやすい
-  params.set("dataType", "json");
-
-  for (const [k, v] of Object.entries(payloadObj)) {
-    if (v == null) continue;
-    params.set(k, String(v));
-  }
+  const params = new URLSearchParams({ uid, dataType: "json" }); // PHPサンプルと同様に dataType=json を付ける
+  params.set(SHORT_FIELD, String(payloadObj.short ?? ""));
+  params.set(LONG_FIELD, String(payloadObj.long ?? ""));
 
   console.log("[tarot-love] writeBack POST:", url);
-  console.log("[tarot-love] writeBack keys:", Object.keys(payloadObj));
-  console.log("[tarot-love] writeBack body head:", params.toString().slice(0, 220));
+  console.log("[tarot-love] writeBack keys:", [SHORT_FIELD, LONG_FIELD]);
+  console.log("[tarot-love] writeBack body head:", params.toString().slice(0, 240));
 
   const r = await fetch(url, {
     method: "POST",
@@ -150,16 +174,17 @@ async function writeBackToProLine(uid, payloadObj) {
 // --------------------
 module.exports = async (req, res) => {
   try {
-    // GETは動作確認用
+    // GETは動作確認用（ブラウザで叩く）
     if (req.method === "GET") {
       const uid = String(req.query?.uid || "test");
       const pasted = String(req.query?.pasted || "");
       const cardId = pickCardId(pasted);
-      const { card, from } = loadCard(cardId);
 
+      const { card, from } = loadCard(cardId);
       return res.status(200).json({
         ok: true,
         uid,
+        pasted,
         cardId,
         found: !!card,
         cardFrom: from,
@@ -172,15 +197,11 @@ module.exports = async (req, res) => {
     const body = await readBody(req);
 
     const uid = String(body?.uid || req.query?.uid || "");
-    const pasted =
-      String(body?.[FREE1_TXT_KEY] || "") ||
-      String(body?.[FREE2_TXT_KEY] || "") ||
-      String(body?.pasted || "");
-
+    const pasted = findTextContainingCardId(body); // ✅ 自動探索
     const cardId = pickCardId(pasted);
 
     console.log("[tarot-love] uid:", uid);
-    console.log("[tarot-love] pasted:", pasted);
+    console.log("[tarot-love] pasted(head):", String(pasted || "").slice(0, 180));
     console.log("[tarot-love] cardId:", cardId);
 
     if (!uid) return res.status(200).json({ ok: true, skipped: true, reason: "uid missing" });
@@ -194,11 +215,7 @@ module.exports = async (req, res) => {
         short +
         "\n\n（例）\ncard_id:major_09\ncard_id:swords_07\n\nそのままコピーして貼るのが確実です🌿";
 
-      const writeBack = await writeBackToProLine(uid, {
-  [FORM12_SHORT_KEY]: shortText, // または short
-  [FORM12_LONG_KEY]:  longText,  // または long
-});
-
+      const writeBack = await writeBackToProLine(uid, { short, long });
       return res.status(200).json({ ok: true, uid, fallback: true, writeBack });
     }
 
@@ -213,24 +230,23 @@ module.exports = async (req, res) => {
         short +
         "\n\n（原因例）\n・途中で文章が欠けた\n・card_idの行が消えた\n・余計な改行が入った";
 
-      const writeBack = await writeBackToProLine(uid, {
-  [FORM12_SHORT_KEY]: shortText, // または short
-  [FORM12_LONG_KEY]:  longText,  // または long
-});
-
+      const writeBack = await writeBackToProLine(uid, { short, long });
       return res.status(200).json({ ok: true, uid, cardId, found: false, writeBack });
     }
 
-    // ✅ 必ず free2(短文) / free1(長文) を保存する
     const shortText = buildTextShort(cardId, card);
     const longText = buildTextLong(cardId, card);
 
-    const writeBack = await writeBackToProLine(uid, {
-  [FORM12_SHORT_KEY]: shortText, // または short
-  [FORM12_LONG_KEY]:  longText,  // または long
-});
+    const writeBack = await writeBackToProLine(uid, { short: shortText, long: longText });
 
-    return res.status(200).json({ ok: true, uid, cardId, found: true, major: isMajor(cardId), writeBack });
+    return res.status(200).json({
+      ok: true,
+      uid,
+      cardId,
+      found: true,
+      major: isMajor(cardId),
+      writeBack,
+    });
   } catch (e) {
     console.error("[tarot-love] ERROR:", e);
     return res.status(200).json({ ok: false, error: String(e?.message || e) });
