@@ -288,6 +288,7 @@ const lineField = normalizeUserDataKey(lineFieldRaw);
 
       const writeBack = await writeBackToProLine(uid, {
         [lineField]: lineText,
+        ["user_data[free2]"]: lineText,
       });
       
   console.log("[tarot-love] writeBack result:", writeBack);
