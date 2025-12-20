@@ -3,6 +3,10 @@ const fs = require("fs");
 const path = require("path");
 const qs = require("querystring");
 
+// ===== ProLine form12 の textarea name（あなたのHTML準拠）=====
+const FREE1_TXT_KEY = "txt[vgbwPXeBy6]"; // 長文
+const FREE2_TXT_KEY = "txt[I8onOXeYSh]"; // 短文
+
 // --------------------
 // helpers
 // --------------------
@@ -49,11 +53,9 @@ function loadCard(cardId) {
 }
 
 function buildTextShort(cardId, card) {
-  // できれば「短文専用」があれば使う
   const short = card?.line?.short;
   if (short) return String(short);
 
-  // 無ければ full の先頭だけ
   const full = card?.line?.full;
   if (full) return String(full).slice(0, 120);
 
@@ -61,15 +63,10 @@ function buildTextShort(cardId, card) {
   const focus = card?.focus ? `意識：${String(card.focus)}` : "";
   const action = card?.action ? `一手：${String(card.action)}` : "";
 
-  return [
-    `【${title}】`,
-    focus,
-    action,
-  ].filter(Boolean).join("\n");
+  return [`【${title}】`, focus, action].filter(Boolean).join("\n");
 }
 
 function buildTextLong(cardId, card) {
-  // 長文専用があればそれを優先
   const long = card?.line?.long;
   if (long) return String(long);
 
@@ -89,7 +86,9 @@ function buildTextLong(cardId, card) {
     action,
     "",
     "今日はここまででOKです🌙",
-  ].filter(Boolean).join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 async function readBody(req) {
@@ -104,7 +103,7 @@ async function readBody(req) {
 
 // --------------------
 // ProLineへ書き戻し（fm）
-// form12 の2項目は txt[ID] で送る（あなたのフォームHTML準拠）
+// ★ txt[ID] で送る & dataType=json を付ける
 // --------------------
 async function writeBackToProLine(uid, payloadObj) {
   const formId = process.env.PROLINE_FORM12_ID;
@@ -113,7 +112,6 @@ async function writeBackToProLine(uid, payloadObj) {
   const fmBase = (process.env.PROLINE_FM_BASE || "https://l8x1uh5r.autosns.app/fm").replace(/\/$/, "");
   const url = `${fmBase}/${formId}`;
 
-  // ★ dataType=json が必須（PHPサンプルと同じ）
   const params = new URLSearchParams({
     uid,
     dataType: "json",
@@ -135,11 +133,7 @@ async function writeBackToProLine(uid, payloadObj) {
   });
 
   const text = await r.text().catch(() => "");
-  return {
-    status: r.status,
-    url,
-    rawSnippet: text.slice(0, 220),
-  };
+  return { status: r.status, url, rawSnippet: text.slice(0, 220) };
 }
 
 // --------------------
@@ -152,8 +146,8 @@ module.exports = async (req, res) => {
       const uid = String(req.query?.uid || "test");
       const pasted = String(req.query?.pasted || "");
       const cardId = pickCardId(pasted);
-
       const { card, from } = loadCard(cardId);
+
       return res.status(200).json({
         ok: true,
         uid,
@@ -170,8 +164,8 @@ module.exports = async (req, res) => {
 
     const uid = String(body?.uid || req.query?.uid || "");
     const pasted =
-      String(body?.["txt[vgbwPXeBy6]"] || "") ||   // free1（長文）
-      String(body?.["txt[I8onOXeYSh]"] || "") ||   // free2（短文）
+      String(body?.[FREE1_TXT_KEY] || "") ||
+      String(body?.[FREE2_TXT_KEY] || "") ||
       String(body?.pasted || "");
 
     const cardId = pickCardId(pasted);
@@ -192,8 +186,9 @@ module.exports = async (req, res) => {
         "\n\n（例）\ncard_id:major_09\ncard_id:swords_07\n\nそのままコピーして貼るのが確実です🌿";
 
       const writeBack = await writeBackToProLine(uid, {
-        "txt[I8onOXeYSh]": short,     // free2（短文）
-        "txt[vgbwPXeBy6]": long,      // free1（長文）
+        [FREE2_TXT_KEY]: short,
+        [FREE1_TXT_KEY]: long,
+      });
 
       return res.status(200).json({ ok: true, uid, fallback: true, writeBack });
     }
@@ -210,19 +205,20 @@ module.exports = async (req, res) => {
         "\n\n（原因例）\n・途中で文章が欠けた\n・card_idの行が消えた\n・余計な改行が入った";
 
       const writeBack = await writeBackToProLine(uid, {
-         "txt[I8onOXeYSh]": short,
-         "txt[vgbwPXeBy6]": long,
+        [FREE2_TXT_KEY]: short,
+        [FREE1_TXT_KEY]: long,
+      });
 
       return res.status(200).json({ ok: true, uid, cardId, found: false, writeBack });
     }
 
-    // ✅ ここが本題：必ず form12-1 / form12-2 に保存する
+    // ✅ 必ず free2(短文) / free1(長文) を保存する
     const shortText = buildTextShort(cardId, card);
     const longText = buildTextLong(cardId, card);
 
     const writeBack = await writeBackToProLine(uid, {
-      "txt[I8onOXeYSh]": shortText,
-      "txt[vgbwPXeBy6]": longText,
+      [FREE2_TXT_KEY]: shortText,
+      [FREE1_TXT_KEY]: longText,
     });
 
     return res.status(200).json({ ok: true, uid, cardId, found: true, major: isMajor(cardId), writeBack });
