@@ -279,7 +279,9 @@ const lineField = normalizeUserDataKey(lineFieldRaw);
       const writeBack = await writeBackToProLine(uid, {
         [lineField]: lineText,
       });
-
+      
+  console.log("[tarot-love] writeBack result:", writeBack);
+      
       const beacon = await callBeaconIfEnabled(uid);
 
       return res.status(200).json({ ok: true, uid, cardId, found: true, writeBack, beacon });
