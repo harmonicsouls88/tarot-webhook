@@ -128,28 +128,38 @@ async function readBody(req) {
 // ProLineへ書き戻し（FM）
 // --------------------
 async function writeBackToProLine(uid, payloadObj) {
-  const formId = process.env.PROLINE_FORM12_ID; // 書き戻し用フォームID
+  const formId = process.env.PROLINE_FORM12_ID;
   if (!formId) throw new Error("Missing env PROLINE_FORM12_ID");
 
   const fmBase = process.env.PROLINE_FM_BASE || "https://autosns.me/fm";
   const url = `${fmBase}/${formId}`;
 
-  // uid + 複数フィールドを一括で送る
   const params = new URLSearchParams({ uid });
   for (const [k, v] of Object.entries(payloadObj)) {
     if (v == null) continue;
     params.set(k, String(v));
   }
 
+  const bodyStr = params.toString();
+  console.log("[tarot-love] writeBack POST:", url);
+  console.log("[tarot-love] writeBack body:", bodyStr);
+
   const r = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: params.toString(),
+    body: bodyStr,
   });
 
-  const json = await r.json().catch(() => ({}));
-  return { status: r.status, body: json };
+  const text = await r.text();
+  console.log("[tarot-love] writeBack raw:", text.slice(0, 500));
+
+  // JSONなら一応パースも試す（できなければnull）
+  let json = null;
+  try { json = JSON.parse(text); } catch {}
+
+  return { status: r.status, raw: text.slice(0, 500), json };
 }
+
 
 // --------------------
 // Beaconで送信（あれば）
