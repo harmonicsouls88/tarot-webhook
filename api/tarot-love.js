@@ -195,9 +195,9 @@ module.exports = async (req, res) => {
         "\n\n（例）\ncard_id:major_09\ncard_id:swords_07\n\nそのままコピーして貼るのが確実です🌿";
 
       const writeBack = await writeBackToProLine(uid, {
-        [FREE2_TXT_KEY]: short,
-        [FREE1_TXT_KEY]: long,
-      });
+  [FORM12_SHORT_KEY]: shortText, // または short
+  [FORM12_LONG_KEY]:  longText,  // または long
+});
 
       return res.status(200).json({ ok: true, uid, fallback: true, writeBack });
     }
@@ -214,9 +214,9 @@ module.exports = async (req, res) => {
         "\n\n（原因例）\n・途中で文章が欠けた\n・card_idの行が消えた\n・余計な改行が入った";
 
       const writeBack = await writeBackToProLine(uid, {
-        [FREE2_TXT_KEY]: short,
-        [FREE1_TXT_KEY]: long,
-      });
+  [FORM12_SHORT_KEY]: shortText, // または short
+  [FORM12_LONG_KEY]:  longText,  // または long
+});
 
       return res.status(200).json({ ok: true, uid, cardId, found: false, writeBack });
     }
@@ -226,9 +226,9 @@ module.exports = async (req, res) => {
     const longText = buildTextLong(cardId, card);
 
     const writeBack = await writeBackToProLine(uid, {
-      [FREE2_TXT_KEY]: shortText,
-      [FREE1_TXT_KEY]: longText,
-    });
+  [FORM12_SHORT_KEY]: shortText, // または short
+  [FORM12_LONG_KEY]:  longText,  // または long
+});
 
     return res.status(200).json({ ok: true, uid, cardId, found: true, major: isMajor(cardId), writeBack });
   } catch (e) {
