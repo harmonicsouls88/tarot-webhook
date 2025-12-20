@@ -141,47 +141,44 @@ async function readBody(req) {
 // --------------------
 // ProLineへ書き戻し（FM）
 // --------------------
-function preview(s, n = 120) {
-  const t = String(s ?? "");
-  return t.length > n ? t.slice(0, n) + "…" : t;
-}
-
-// writeBackToProLine(uid, payloadObj) の直前に入れる
-console.log("[tarot-love] will writeBack keys:", Object.keys(payloadObj));
-for (const [k, v] of Object.entries(payloadObj)) {
-  console.log(`[tarot-love] payload ${k} len=${String(v ?? "").length} preview=${preview(v)}`);
-}
-
 async function writeBackToProLine(uid, payloadObj) {
-  const formId = process.env.PROLINE_FORM12_ID; // 書き戻し用フォームID
+  const formId = process.env.PROLINE_FORM12_ID;
   if (!formId) throw new Error("Missing env PROLINE_FORM12_ID");
 
-  // ✅ fm は /fm が必須のケースがあるので、ここは「/fm入り」を推奨
+  // ※あなたの環境では /fm 必須なので、ここは必ず /fm を含める
   const fmBase = process.env.PROLINE_FM_BASE || "https://l8x1uh5r.autosns.app/fm";
-  const url = `${fmBase.replace(/\/$/, "")}/${formId}`;
+  const url = `${String(fmBase).replace(/\/$/, "")}/${formId}`;
 
-  // uid + 複数フィールドを一括で送る
+  // uid + 複数フィールドを一括送信
   const params = new URLSearchParams({ uid });
-  for (const [k, v] of Object.entries(payloadObj)) {
+  for (const [k, v] of Object.entries(payloadObj || {})) {
     if (v == null) continue;
     params.set(k, String(v));
   }
 
-  // ProLineの返りが JSON じゃなく HTML のことがあるので text で受ける
+  // ★ここで payloadObj を参照しても落ちないように安全にログ
+  console.log("[tarot-love] writeBack keys:", Object.keys(payloadObj || {}));
+  console.log("[tarot-love] writeBack POST:", url);
+  console.log("[tarot-love] writeBack body:", params.toString().slice(0, 180));
+
   const r = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: params.toString(),
   });
 
-  const raw = await r.text().catch(() => "");
+  const text = await r.text().catch(() => "");
+  let json = null;
+  try { json = JSON.parse(text); } catch {}
+
   return {
     status: r.status,
     url,
-    rawSnippet: raw ? raw.slice(0, 260) : "",
+    // ProLineはHTML返すことがあるので先頭だけ残す（成功判定の材料）
+    rawSnippet: (text || "").slice(0, 260),
+    json,
   };
 }
-
 // --------------------
 // Beaconで送信（あれば）
 // --------------------
