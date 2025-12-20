@@ -6,9 +6,9 @@ const qs = require("querystring");
 // --------------------
 // helpers
 // --------------------
-function pickCardId(text) {
-  if (!text) return "";
-  const m = String(text).match(/card_id\s*[:=]\s*([A-Za-z0-9_]+)/);
+function pickCardId(pasted) {
+  if (!pasted) return "";
+  const m = String(pasted).match(/card_id\s*[:=]\s*([A-Za-z0-9_]+)/);
   return m?.[1] ?? "";
 }
 
@@ -82,9 +82,7 @@ function buildTextLong(cardId, card) {
     action,
     "",
     "今日はここまででOKです🌙",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 async function readBody(req) {
@@ -97,63 +95,31 @@ async function readBody(req) {
   return qs.parse(raw);
 }
 
-/**
- * ProLineから来た body の中で、card_id を含むテキストを自動で探す
- * （どのフォーム項目に入って来ても拾えるようにする）
- */
-function findTextContainingCardId(body) {
-  if (!body || typeof body !== "object") return "";
-
-  // よくあるキーを優先
-  const preferredKeys = [
-    "pasted",
-    "text",
-    "message",
-    "form_data[form11-1]",
-    "form11-1",
-    "form_data[form12-1]",
-    "form12-1",
-  ];
-
-  for (const k of preferredKeys) {
-    const v = body?.[k];
-    if (typeof v === "string" && v.includes("card_id")) return v;
+// bodyの中から「card_id:xxxx」を含む値を探す（どのフィールド名でも拾う）
+function findPastedAnywhere(body) {
+  for (const [k, v] of Object.entries(body || {})) {
+    const s = Array.isArray(v) ? v.join("\n") : String(v ?? "");
+    if (s.includes("card_id")) return { key: k, value: s };
   }
-
-  // 全キー走査：どれかに card_id が入っていればそれを採用
-  for (const [k, v] of Object.entries(body)) {
-    if (typeof v === "string" && v.includes("card_id")) {
-      return v;
-    }
-  }
-
-  return "";
+  return { key: "", value: "" };
 }
 
 // --------------------
 // ProLineへ書き戻し（fm）
-// ※ form12 の textarea name が txt[xxxxx] 形式なので、それに合わせる
 // --------------------
-async function writeBackToProLine(uid, payloadObj) {
-  const formId = process.env.PROLINE_FORM12_ID; // xBi34LzVvN
-  if (!formId) throw new Error("Missing env PROLINE_FORM12_ID");
-
+async function writeBackToProLine(formId, uid, payloadObj) {
   const fmBase = (process.env.PROLINE_FM_BASE || "https://l8x1uh5r.autosns.app/fm").replace(/\/$/, "");
   const url = `${fmBase}/${formId}`;
 
-  // ✅ あなたの form HTML から確定した name
-  // 長文：txt[vgbwPXeBy6]
-  // 短文：txt[I8onOXeYSh]
-  const LONG_FIELD = process.env.PROLINE_FORM12_LONG_FIELD || "txt[vgbwPXeBy6]";
-  const SHORT_FIELD = process.env.PROLINE_FORM12_SHORT_FIELD || "txt[I8onOXeYSh]";
-
-  const params = new URLSearchParams({ uid, dataType: "json" }); // PHPサンプルと同様に dataType=json を付ける
-  params.set(SHORT_FIELD, String(payloadObj.short ?? ""));
-  params.set(LONG_FIELD, String(payloadObj.long ?? ""));
+  const params = new URLSearchParams({ uid });
+  for (const [k, v] of Object.entries(payloadObj)) {
+    if (v == null) continue;
+    params.set(k, String(v));
+  }
 
   console.log("[tarot-love] writeBack POST:", url);
-  console.log("[tarot-love] writeBack keys:", [SHORT_FIELD, LONG_FIELD]);
-  console.log("[tarot-love] writeBack body head:", params.toString().slice(0, 240));
+  console.log("[tarot-love] writeBack keys:", Object.keys(payloadObj));
+  console.log("[tarot-love] writeBack body head:", params.toString().slice(0, 220));
 
   const r = await fetch(url, {
     method: "POST",
@@ -162,11 +128,7 @@ async function writeBackToProLine(uid, payloadObj) {
   });
 
   const text = await r.text().catch(() => "");
-  return {
-    status: r.status,
-    url,
-    rawSnippet: text.slice(0, 220),
-  };
+  return { status: r.status, url, rawSnippet: text.slice(0, 220) };
 }
 
 // --------------------
@@ -174,17 +136,16 @@ async function writeBackToProLine(uid, payloadObj) {
 // --------------------
 module.exports = async (req, res) => {
   try {
-    // GETは動作確認用（ブラウザで叩く）
+    // 動作確認
     if (req.method === "GET") {
       const uid = String(req.query?.uid || "test");
       const pasted = String(req.query?.pasted || "");
       const cardId = pickCardId(pasted);
-
       const { card, from } = loadCard(cardId);
+
       return res.status(200).json({
         ok: true,
         uid,
-        pasted,
         cardId,
         found: !!card,
         cardFrom: from,
@@ -193,20 +154,39 @@ module.exports = async (req, res) => {
       });
     }
 
-    // POST（ProLine）
     const body = await readBody(req);
-
     const uid = String(body?.uid || req.query?.uid || "");
-    const pasted = findTextContainingCardId(body); // ✅ 自動探索
-    const cardId = pickCardId(pasted);
 
     console.log("[tarot-love] uid:", uid);
-    console.log("[tarot-love] pasted(head):", String(pasted || "").slice(0, 180));
-    console.log("[tarot-love] cardId:", cardId);
+    console.log("[tarot-love] body keys:", Object.keys(body || {}));
 
     if (!uid) return res.status(200).json({ ok: true, skipped: true, reason: "uid missing" });
 
-    // card_idが無い
+    // pastedはどのキーでも拾えるようにする
+    const found = findPastedAnywhere(body);
+    const pasted = found.value || "";
+    const cardId = pickCardId(pasted);
+
+    console.log("[tarot-love] pastedKey:", found.key);
+    console.log("[tarot-love] cardId:", cardId);
+
+    // === 書き戻し先ID（環境変数） ===
+    const FORM11_ID = process.env.PROLINE_FORM11_ID; // form11（送信したフォーム）
+    const FORM12_ID = process.env.PROLINE_FORM12_ID; // form12（結果保存用）
+
+    if (!FORM11_ID || !FORM12_ID) {
+      throw new Error("Missing env PROLINE_FORM11_ID or PROLINE_FORM12_ID");
+    }
+
+    // fp6で表示するための txt[xxxx]（あなたのHTMLに合わせて固定）
+    const FP6_LONG = process.env.PROLINE_FP6_LONG_FIELD || "txt[vgbwPXeBy6]";
+    const FP6_SHORT = process.env.PROLINE_FP6_SHORT_FIELD || "txt[I8onOXeYSh]";
+
+    // cp21で表示するための form12-1 / form12-2
+    const CP21_LONG = "form_data[form12-1]";
+    const CP21_SHORT = "form_data[form12-2]";
+
+    // card_idが無い → エラーメッセージを両方に書く
     if (!cardId) {
       const short =
         "🙏 うまく読み取れませんでした。\n" +
@@ -215,8 +195,10 @@ module.exports = async (req, res) => {
         short +
         "\n\n（例）\ncard_id:major_09\ncard_id:swords_07\n\nそのままコピーして貼るのが確実です🌿";
 
-      const writeBack = await writeBackToProLine(uid, { short, long });
-      return res.status(200).json({ ok: true, uid, fallback: true, writeBack });
+      const wb11 = await writeBackToProLine(FORM11_ID, uid, { [FP6_SHORT]: short, [FP6_LONG]: long });
+      const wb12 = await writeBackToProLine(FORM12_ID, uid, { [CP21_SHORT]: short, [CP21_LONG]: long });
+
+      return res.status(200).json({ ok: true, uid, fallback: true, writeBack11: wb11, writeBack12: wb12 });
     }
 
     const { card, from } = loadCard(cardId);
@@ -230,14 +212,27 @@ module.exports = async (req, res) => {
         short +
         "\n\n（原因例）\n・途中で文章が欠けた\n・card_idの行が消えた\n・余計な改行が入った";
 
-      const writeBack = await writeBackToProLine(uid, { short, long });
-      return res.status(200).json({ ok: true, uid, cardId, found: false, writeBack });
+      const wb11 = await writeBackToProLine(FORM11_ID, uid, { [FP6_SHORT]: short, [FP6_LONG]: long });
+      const wb12 = await writeBackToProLine(FORM12_ID, uid, { [CP21_SHORT]: short, [CP21_LONG]: long });
+
+      return res.status(200).json({ ok: true, uid, cardId, found: false, writeBack11: wb11, writeBack12: wb12 });
     }
 
+    // ✅ 本文生成
     const shortText = buildTextShort(cardId, card);
     const longText = buildTextLong(cardId, card);
 
-    const writeBack = await writeBackToProLine(uid, { short: shortText, long: longText });
+    // ✅ form11（fp6用）にも書く
+    const wb11 = await writeBackToProLine(FORM11_ID, uid, {
+      [FP6_SHORT]: shortText,
+      [FP6_LONG]: longText,
+    });
+
+    // ✅ form12（cp21用）にも書く
+    const wb12 = await writeBackToProLine(FORM12_ID, uid, {
+      [CP21_SHORT]: shortText,
+      [CP21_LONG]: longText,
+    });
 
     return res.status(200).json({
       ok: true,
@@ -245,7 +240,8 @@ module.exports = async (req, res) => {
       cardId,
       found: true,
       major: isMajor(cardId),
-      writeBack,
+      writeBack11: wb11,
+      writeBack12: wb12,
     });
   } catch (e) {
     console.error("[tarot-love] ERROR:", e);
