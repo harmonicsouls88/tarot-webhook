@@ -141,6 +141,17 @@ async function readBody(req) {
 // --------------------
 // ProLineへ書き戻し（FM）
 // --------------------
+function preview(s, n = 120) {
+  const t = String(s ?? "");
+  return t.length > n ? t.slice(0, n) + "…" : t;
+}
+
+// writeBackToProLine(uid, payloadObj) の直前に入れる
+console.log("[tarot-love] will writeBack keys:", Object.keys(payloadObj));
+for (const [k, v] of Object.entries(payloadObj)) {
+  console.log(`[tarot-love] payload ${k} len=${String(v ?? "").length} preview=${preview(v)}`);
+}
+
 async function writeBackToProLine(uid, payloadObj) {
   const formId = process.env.PROLINE_FORM12_ID; // 書き戻し用フォームID
   if (!formId) throw new Error("Missing env PROLINE_FORM12_ID");
