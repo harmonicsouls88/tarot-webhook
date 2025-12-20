@@ -104,7 +104,7 @@ async function readBody(req) {
 
 // --------------------
 // ProLineへ書き戻し（fm）
-// form12-1 / form12-2 へ入れる
+// form12 の2項目は txt[ID] で送る（あなたのフォームHTML準拠）
 // --------------------
 async function writeBackToProLine(uid, payloadObj) {
   const formId = process.env.PROLINE_FORM12_ID;
@@ -113,7 +113,12 @@ async function writeBackToProLine(uid, payloadObj) {
   const fmBase = (process.env.PROLINE_FM_BASE || "https://l8x1uh5r.autosns.app/fm").replace(/\/$/, "");
   const url = `${fmBase}/${formId}`;
 
-  const params = new URLSearchParams({ uid });
+  // ★ dataType=json が必須（PHPサンプルと同じ）
+  const params = new URLSearchParams({
+    uid,
+    dataType: "json",
+  });
+
   for (const [k, v] of Object.entries(payloadObj)) {
     if (v == null) continue;
     params.set(k, String(v));
@@ -121,7 +126,6 @@ async function writeBackToProLine(uid, payloadObj) {
 
   console.log("[tarot-love] writeBack POST:", url);
   console.log("[tarot-love] writeBack keys:", Object.keys(payloadObj));
-  // 中身は長いので先頭だけログ
   console.log("[tarot-love] writeBack body head:", params.toString().slice(0, 220));
 
   const r = await fetch(url, {
@@ -131,7 +135,6 @@ async function writeBackToProLine(uid, payloadObj) {
   });
 
   const text = await r.text().catch(() => "");
-  // ProLineはJSONではなくHTMLが返ることがある（そのままログでOK）
   return {
     status: r.status,
     url,
@@ -167,10 +170,8 @@ module.exports = async (req, res) => {
 
     const uid = String(body?.uid || req.query?.uid || "");
     const pasted =
-      String(body?.["form_data[form11-1]"] || "") ||
-      String(body?.["form_data[form12-1]"] || "") ||
-      String(body?.["form11-1"] || "") ||
-      String(body?.["form12-1"] || "") ||
+      String(body?.["txt[vgbwPXeBy6]"] || "") ||   // free1（長文）
+      String(body?.["txt[I8onOXeYSh]"] || "") ||   // free2（短文）
       String(body?.pasted || "");
 
     const cardId = pickCardId(pasted);
@@ -191,9 +192,8 @@ module.exports = async (req, res) => {
         "\n\n（例）\ncard_id:major_09\ncard_id:swords_07\n\nそのままコピーして貼るのが確実です🌿";
 
       const writeBack = await writeBackToProLine(uid, {
-        "form_data[form12-2]": short, // 短文（fp6/cp21の上）
-        "form_data[form12-1]": long,  // 長文（cp21の詳細）
-      });
+        "txt[I8onOXeYSh]": short,     // free2（短文）
+        "txt[vgbwPXeBy6]": long,      // free1（長文）
 
       return res.status(200).json({ ok: true, uid, fallback: true, writeBack });
     }
@@ -210,9 +210,8 @@ module.exports = async (req, res) => {
         "\n\n（原因例）\n・途中で文章が欠けた\n・card_idの行が消えた\n・余計な改行が入った";
 
       const writeBack = await writeBackToProLine(uid, {
-        "form_data[form12-2]": short,
-        "form_data[form12-1]": long,
-      });
+         "txt[I8onOXeYSh]": short,
+         "txt[vgbwPXeBy6]": long,
 
       return res.status(200).json({ ok: true, uid, cardId, found: false, writeBack });
     }
@@ -222,8 +221,8 @@ module.exports = async (req, res) => {
     const longText = buildTextLong(cardId, card);
 
     const writeBack = await writeBackToProLine(uid, {
-      "form_data[form12-2]": shortText,
-      "form_data[form12-1]": longText,
+      "txt[I8onOXeYSh]": shortText,
+      "txt[vgbwPXeBy6]": longText,
     });
 
     return res.status(200).json({ ok: true, uid, cardId, found: true, major: isMajor(cardId), writeBack });
