@@ -6,6 +6,17 @@ const qs = require("querystring");
 // --------------------
 // helpers
 // --------------------
+function normalizeUserDataKey(key) {
+  if (!key) return "";
+  const k = String(key).trim();
+
+  // すでに user_data[xxx] 形式ならそのまま
+  if (/^user_data\[[^\]]+\]$/.test(k)) return k;
+
+  // free1 / free2 / xtarot_message / xtarot_detail を user_data[...] に変換
+  return `user_data[${k}]`;
+}
+
 function pickCardId(pasted) {
   if (!pasted) return "";
   // 例: "card_id:major_16" / "card_id = wands_01"
@@ -205,8 +216,10 @@ module.exports = async (req, res) => {
         "card_id:xxxx";
 
       // free2へ書き戻し（LINEで見せる用）
-      const lineField = process.env.PROLINE_LINE_FIELD || "user_data[free2]";
-      const writeBack = await writeBackToProLine(uid, { [lineField]: fallback });
+      const lineFieldRaw = process.env.PROLINE_LINE_FIELD || "free2";
+const lineField = normalizeUserDataKey(lineFieldRaw);
+
+const writeBack = await writeBackToProLine(uid, { [lineField]: fallback });
       const beacon = await callBeaconIfEnabled(uid);
 
       return res.status(200).json({ ok: true, uid, fallback: true, writeBack, beacon });
@@ -220,21 +233,30 @@ module.exports = async (req, res) => {
         "🙏 カード情報が見つかりませんでした。\n" +
         "もう一度「今日のワンカード」で引き直して、表示された文章をそのまま貼り付けてください🌿";
 
-      const lineField = process.env.PROLINE_LINE_FIELD || "user_data[free2]";
-      const writeBack = await writeBackToProLine(uid, { [lineField]: notFound });
+      const lineFieldRaw = process.env.PROLINE_LINE_FIELD || "free2";
+const lineField = normalizeUserDataKey(lineFieldRaw);
+
+const writeBack = await writeBackToProLine(uid, { [lineField]: notFound });
       const beacon = await callBeaconIfEnabled(uid);
 
       return res.status(200).json({ ok: true, uid, cardId, found: false, writeBack, beacon });
     }
 
     // フィールド名（fmに送るキー）は user_data[freeX] が正解
-    const cp21Field = process.env.PROLINE_CP21_FIELD || "user_data[free1]";
-    const lineField = process.env.PROLINE_LINE_FIELD || "user_data[free2]";
+    const cp21FieldRaw = process.env.PROLINE_CP21_FIELD || "free1";
+const lineFieldRaw = process.env.PROLINE_LINE_FIELD || "free2";
 
+const cp21Field = normalizeUserDataKey(cp21FieldRaw);
+const lineField = normalizeUserDataKey(lineFieldRaw);
+    
     if (isMajor(cardId)) {
       const cp21Text = buildTextForCp21(card);
       const lineText = buildTextForLine(cardId, card);
 
+      console.log("[tarot-love] writeBack keys:", Object.keys({
+  [cp21Field]: "cp21Text",
+  [lineField]: "lineText",
+}));
       console.log("[tarot-love] major writeBack -> free1 free2");
 
       const writeBack = await writeBackToProLine(uid, {
@@ -249,6 +271,9 @@ module.exports = async (req, res) => {
       // 小アルカナ：LINE完結（free2）
       const lineText = buildTextForLine(cardId, card);
 
+      console.log("[tarot-love] writeBack keys:", Object.keys({
+  [lineField]: "lineText",
+}));
       console.log("[tarot-love] minor writeBack -> free2");
 
       const writeBack = await writeBackToProLine(uid, {
