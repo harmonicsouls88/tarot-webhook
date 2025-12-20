@@ -101,21 +101,26 @@ async function readBody(req) {
   return qs.parse(raw);
 }
 
+// ✅ form12 の textarea name（あなたのHTMLから拾った“正”のキー）
+const FORM12_LONG_KEY  = "txt[vgbwPXeBy6]";   // 長文（タロット詳細）
+const FORM12_SHORT_KEY = "txt[I8onOXeYSh]";   // 短文（LINE吹き出し）
+
 // --------------------
 // ProLineへ書き戻し（fm）
 // ★ txt[ID] で送る & dataType=json を付ける
 // --------------------
 async function writeBackToProLine(uid, payloadObj) {
-  const formId = process.env.PROLINE_FORM12_ID;
+  const formId = process.env.PROLINE_FORM12_ID; // xBi34LzVvN が入ってる想定
   if (!formId) throw new Error("Missing env PROLINE_FORM12_ID");
 
   const fmBase = (process.env.PROLINE_FM_BASE || "https://l8x1uh5r.autosns.app/fm").replace(/\/$/, "");
   const url = `${fmBase}/${formId}`;
 
-  const params = new URLSearchParams({
-    uid,
-    dataType: "json",
-  });
+  const params = new URLSearchParams();
+  params.set("uid", uid);
+
+  // ✅ PHPサンプルと同じ。これがあると“確認画面ありフォーム”でも通りやすい
+  params.set("dataType", "json");
 
   for (const [k, v] of Object.entries(payloadObj)) {
     if (v == null) continue;
@@ -133,7 +138,11 @@ async function writeBackToProLine(uid, payloadObj) {
   });
 
   const text = await r.text().catch(() => "");
-  return { status: r.status, url, rawSnippet: text.slice(0, 220) };
+  return {
+    status: r.status,
+    url,
+    rawSnippet: text.slice(0, 220),
+  };
 }
 
 // --------------------
