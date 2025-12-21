@@ -86,11 +86,24 @@ function loadThemeAddon(theme, cardId) {
   const j = readJsonIfExists(p);
   if (!j) return { addon: null, from: p };
 
-  // どっちの形でも読めるようにする
-  // A) { "cups_02": { ... } }
-  // B) { "cards": { "cups_02": { ... } } }
-  const addon = (j.cards && j.cards[cardId]) ? j.cards[cardId] : j[cardId];
-  return { addon: addon || null, from: p };
+  // ✅ 1) { "append": { "cups_02": "..." } }  ←あなたの今の形
+  if (j.append && j.append[cardId]) {
+    return { addon: { message: j.append[cardId] }, from: p };
+  }
+
+  // ✅ 2) { "cards": { "cups_02": { message: "..." } } }
+  if (j.cards && j.cards[cardId]) {
+    return { addon: j.cards[cardId], from: p };
+  }
+
+  // ✅ 3) { "cups_02": { message: "..." } } or { "cups_02": "..." }
+  if (j[cardId]) {
+    const v = j[cardId];
+    if (typeof v === "string") return { addon: { message: v }, from: p };
+    return { addon: v, from: p };
+  }
+
+  return { addon: null, from: p };
 }
 
 // ✅ 共通カードにテーマ追記をマージ（message 追記が中心）
