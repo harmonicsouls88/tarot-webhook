@@ -3,12 +3,16 @@ const fs = require("fs");
 const path = require("path");
 const qs = require("querystring");
 
+// ---- ProLine: この2つは「あなたの form12 の txtキー」に固定 ----
+const FORM12_LONG_KEY = "txt[vgbwPXeBy6]";   // 長文（詳細）
+const FORM12_SHORT_KEY = "txt[I8onOXeYSh]";  // 短文（吹き出し）
+
 // --------------------
 // helpers
 // --------------------
 function pickCardId(pasted) {
   if (!pasted) return "";
-  const m = String(pasted).match(/card_id\s*[:=]\s*([A-Za-z0-9_]+)/);
+  const m = String(pasted).match(/card_id\s*[:=]\s*([A-Za-z0-9_]+)/i);
   return m?.[1] ?? "";
 }
 
@@ -97,10 +101,10 @@ async function readBody(req) {
 
 // --------------------
 // ProLineへ書き戻し（fm）
-// form12 に保存（txt[]の実IDへ）
+// form12（保存用フォーム）に txt[...] で入れる
 // --------------------
 async function writeBackToProLine(uid, payloadObj) {
-  const formId = process.env.PROLINE_FORM12_ID; // ← xBi34LzVvN を入れる
+  const formId = process.env.PROLINE_FORM12_ID; // xBi34LzVvN を env に
   if (!formId) throw new Error("Missing env PROLINE_FORM12_ID");
 
   const fmBase = (process.env.PROLINE_FM_BASE || "https://l8x1uh5r.autosns.app/fm").replace(/\/$/, "");
@@ -131,12 +135,13 @@ async function writeBackToProLine(uid, payloadObj) {
 // --------------------
 module.exports = async (req, res) => {
   try {
+    // GETは動作確認用
     if (req.method === "GET") {
       const uid = String(req.query?.uid || "test");
       const pasted = String(req.query?.pasted || "");
       const cardId = pickCardId(pasted);
-      const { card, from } = loadCard(cardId);
 
+      const { card, from } = loadCard(cardId);
       return res.status(200).json({
         ok: true,
         uid,
@@ -148,26 +153,28 @@ module.exports = async (req, res) => {
       });
     }
 
+    // POST（ProLine）
     const body = await readBody(req);
+
     const uid = String(body?.uid || req.query?.uid || "");
 
-    // ★ form11 は txt[zeRq0T9Qo1]
+    // ✅ form11の貼り付け欄は txt[zeRq0T9Qo1]
+    // ほかのキーでも来たときの保険を残す
     const pasted =
       String(body?.["txt[zeRq0T9Qo1]"] || "") ||
-      String(body?.pasted || "");
+      String(body?.pasted || "") ||
+      String(body?.["form11-1"] || "") ||
+      String(body?.["form_data[form11-1]"] || "");
 
     const cardId = pickCardId(pasted);
 
     console.log("[tarot-love] uid:", uid);
-    console.log("[tarot-love] pasted head:", String(pasted).slice(0, 140));
+    console.log("[tarot-love] pasted head:", String(pasted).slice(0, 160));
     console.log("[tarot-love] cardId:", cardId);
 
     if (!uid) return res.status(200).json({ ok: true, skipped: true, reason: "uid missing" });
 
-    // form12 の保存先（あなたの実ID）
-    const FIELD_LONG = "txt[vgbwPXeBy6]";   // 長文
-    const FIELD_SHORT = "txt[I8onOXeYSh]";  // 短文
-
+    // card_idが無い
     if (!cardId) {
       const short =
         "🙏 うまく読み取れませんでした。\n" +
@@ -177,8 +184,8 @@ module.exports = async (req, res) => {
         "\n\n（例）\ncard_id:major_09\ncard_id:swords_07\n\nそのままコピーして貼るのが確実です🌿";
 
       const writeBack = await writeBackToProLine(uid, {
-        [FIELD_SHORT]: short,
-        [FIELD_LONG]: long,
+        [FORM12_SHORT_KEY]: short,
+        [FORM12_LONG_KEY]: long,
       });
 
       return res.status(200).json({ ok: true, uid, fallback: true, writeBack });
@@ -196,19 +203,20 @@ module.exports = async (req, res) => {
         "\n\n（原因例）\n・途中で文章が欠けた\n・card_idの行が消えた\n・余計な改行が入った";
 
       const writeBack = await writeBackToProLine(uid, {
-        [FIELD_SHORT]: short,
-        [FIELD_LONG]: long,
+        [FORM12_SHORT_KEY]: short,
+        [FORM12_LONG_KEY]: long,
       });
 
       return res.status(200).json({ ok: true, uid, cardId, found: false, writeBack });
     }
 
+    // ✅ 正常：form12へ短文+長文を保存
     const shortText = buildTextShort(cardId, card);
     const longText = buildTextLong(cardId, card);
 
     const writeBack = await writeBackToProLine(uid, {
-      [FIELD_SHORT]: shortText,
-      [FIELD_LONG]: longText,
+      [FORM12_SHORT_KEY]: shortText,
+      [FORM12_LONG_KEY]: longText,
     });
 
     return res.status(200).json({ ok: true, uid, cardId, found: true, major: isMajor(cardId), writeBack });
