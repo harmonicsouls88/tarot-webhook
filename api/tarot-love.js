@@ -27,7 +27,14 @@ function detectSuit(cardId) {
 function readJsonIfExists(p) {
   if (!p || !fs.existsSync(p)) return null;
   const raw = fs.readFileSync(p, "utf8");
-  return JSON.parse(raw);
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    // どのファイルが壊れてるか分かるようにする
+    const msg = `[JSON_PARSE_ERROR] file=${p} :: ${e.message}`;
+    console.error(msg);
+    throw new Error(msg);
+  }
 }
 
 // theme:love / theme:work / theme:money / theme:health
