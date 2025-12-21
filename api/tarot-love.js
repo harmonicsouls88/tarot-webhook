@@ -7,9 +7,17 @@ const qs = require("querystring");
 // helpers
 // --------------------
 function pickCardId(pasted) {
-  if (!pasted) return "";
-  const m = String(pasted).match(/card_id\s*[:=]\s*([A-Za-z0-9_]+)/);
-  return m?.[1] ?? "";
+  const s = String(pasted || "");
+
+  // 1) 「行としての card_id:xxxx」だけ拾う（複数あれば最後を採用）
+  const matches = [...s.matchAll(/^\s*card_id\s*[:=]\s*([A-Za-z0-9_]+)\s*$/gmi)];
+  if (matches.length) return matches[matches.length - 1][1];
+
+  // 2) 保険：どこでもいいから card_id を拾う（ただし最後を採用）
+  const matches2 = [...s.matchAll(/card_id\s*[:=]\s*([A-Za-z0-9_]+)/gmi)];
+  if (matches2.length) return matches2[matches2.length - 1][1];
+
+  return "";
 }
 
 function isMajor(cardId) {
