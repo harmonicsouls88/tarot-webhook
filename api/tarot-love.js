@@ -359,14 +359,20 @@ module.exports = async (req, res) => {
       "form_data[form12-1]": longText,
     });
 
-   return res.status(200).json({
-  ok: true,
-  uid,
-  theme,
-  cardId,
-  found: !!card,
-  commonFrom,
-  themeFrom,
-  shortPreview: card ? buildTextShort(cardId, card) : "",
-  longPreview: card ? buildTextLong(cardId, card, getCtaByTheme(theme, uid)) : "",
- }); 
+      return res.status(200).json({
+      ok: true,
+      uid,
+      theme,
+      cardId,
+      found: true,
+      commonFrom,
+      themeFrom,
+      shortPreview: buildTextShort(cardId, card),
+      longPreview: buildTextLong(cardId, card, getCtaByTheme(theme, uid)),
+      writeBack,
+    });
+  } catch (e) {
+    console.error("[tarot-love] ERROR:", e);
+    return res.status(200).json({ ok: false, error: String(e?.message || e) });
+  }
+};
