@@ -370,5 +370,3 @@ module.exports = async (req, res) => {
   shortPreview: card ? buildTextShort(cardId, card) : "",
   longPreview: card ? buildTextLong(cardId, card, getCtaByTheme(theme, uid)) : "",
 });
-  }
-};
