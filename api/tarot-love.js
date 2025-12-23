@@ -1,301 +1,315 @@
-// /api/tarot-love.js
-// ProLine(Webhook) -> Vercel -> ProLine(writeBack to form12)
+// api/tarot-love.js
+// ProLine -> Vercel webhook -> ProLine writeBack
+// - theme を form11-5 から取得（恋愛/仕事/金運/健康）
+// - cards/** を vercel.json includeFiles で同梱して fs で読む
+// - 本文は free5/free1/free3/free4 に分割して保存（文字数制限回避）
+// - cp21 は free6(short) と free5+free1+free3+free4 を結合表示する想定
 
 const fs = require("fs");
 const path = require("path");
 
-// ===== 設定 =====
-// form12（結果書き出し先）のURL（ログに出ていたもの）
-const WRITEBACK_URL = process.env.WRITEBACK_URL || "https://l8x1uh5r.autosns.app/fm/xBi34LzVvN";
-
-// free系の1フィールド上限（ログ的に約300で切れている）
-const FREE_LIMIT = 280; // 安全側（改行や絵文字でズレるので少し短く）
-
-// ===== ユーティリティ =====
-function safeStr(v) {
-  if (v === undefined || v === null) return "";
-  if (Array.isArray(v)) return v.map(safeStr).join("\n");
-  return String(v);
+// =========================
+// utilities
+// =========================
+function log(...args) {
+  console.log("[tarot-love]", ...args);
 }
 
-function normalizeSpace(s) {
-  return safeStr(s).replace(/\r/g, "\n").replace(/[ \t]+/g, " ").trim();
-}
-
-// cardIdに混ざる改行/ゴミ文字対策：英数字と_だけ残す
-function sanitizeId(id) {
-  const t = safeStr(id).trim();
-  return t.replace(/[^a-z0-9_]/gi, "");
-}
-
-function splitByLimit(text, limit) {
-  const s = safeStr(text);
-  if (s.length <= limit) return [s, ""];
-  return [s.slice(0, limit), s.slice(limit, limit * 2)]; // 2分割（free5/free6）
-}
-
-function readJson(filePath) {
-  return JSON.parse(fs.readFileSync(filePath, "utf8"));
-}
-
-function guessThemeFromText(text) {
-  const t = normalizeSpace(text).toLowerCase();
-
-  // まず英語
-  if (t.includes("money")) return { theme: "money", raw: "money" };
-  if (t.includes("love")) return { theme: "love", raw: "love" };
-  if (t.includes("work")) return { theme: "work", raw: "work" };
-  if (t.includes("health")) return { theme: "health", raw: "health" };
-
-  // 日本語
-  if (t.includes("金運")) return { theme: "money", raw: "金運" };
-  if (t.includes("恋愛")) return { theme: "love", raw: "恋愛" };
-  if (t.includes("仕事")) return { theme: "work", raw: "仕事" };
-  if (t.includes("健康")) return { theme: "health", raw: "健康" };
-
-  return { theme: "love", raw: "" }; // デフォルト
-}
-
-// form送信ボディの「どこか」に入ってる theme を総当たりで拾う
-function extractTheme(reqBody) {
-  const candidates = [];
-
-  // 1) ありがちなキー
-  const keysLikely = [
-    "theme",
-    "form_data[theme]",
-    "sel[theme]",
-    "form_data[sel[theme]]",
-  ];
-  keysLikely.forEach((k) => candidates.push(safeStr(reqBody?.[k])));
-
-  // 2) form11-* / form12-* の値も全部候補に入れる（どれかに入ってる）
-  if (reqBody && typeof reqBody === "object") {
-    for (const [k, v] of Object.entries(reqBody)) {
-      const key = String(k);
-      if (
-        key.includes("form11") ||
-        key.includes("form12") ||
-        key.includes("free")
-      ) {
-        candidates.push(safeStr(v));
+// ProLine は application/x-www-form-urlencoded で来ることが多い
+function parseBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = "";
+    req.on("data", (c) => (data += c));
+    req.on("end", () => {
+      const ct = (req.headers["content-type"] || "").toLowerCase();
+      // urlencoded
+      if (ct.includes("application/x-www-form-urlencoded")) {
+        const params = new URLSearchParams(data);
+        const obj = {};
+        for (const [k, v] of params.entries()) obj[k] = v;
+        return resolve(obj);
       }
-    }
-  }
-
-  // 3) 最初に当たったもの
-  for (const c of candidates) {
-    const g = guessThemeFromText(c);
-    if (g.raw) return g;
-  }
-  // 4) 何も無ければデフォルト
-  return { theme: "love", raw: "" };
+      // json
+      if (ct.includes("application/json")) {
+        try {
+          return resolve(JSON.parse(data || "{}"));
+        } catch (e) {
+          return reject(e);
+        }
+      }
+      // fallback: try urlencoded anyway
+      const params = new URLSearchParams(data);
+      const obj = {};
+      for (const [k, v] of params.entries()) obj[k] = v;
+      resolve(obj);
+    });
+    req.on("error", reject);
+  });
 }
 
-// pasted テキストから card_id を拾う（ゆるく対応）
-function extractCardIdFromPasted(pasted) {
-  const t = safeStr(pasted);
-
-  // 例: card_id:cups_01 / card_id: major_09 / card_id=...
-  const m = t.match(/card[_ -]?id\s*[:=]\s*([A-Za-z0-9_]+)/i);
-  if (m && m[1]) return sanitizeId(m[1]);
-
-  // それでも無ければ、major_XX / cups_XX っぽいものを拾う
-  const m2 = t.match(/\b(major_\d{2}|cups_\d{2}|wands_\d{2}|swords_\d{2}|pentacles_\d{2})\b/i);
-  if (m2 && m2[1]) return sanitizeId(m2[1]);
-
+function pick(obj, keys) {
+  for (const k of keys) {
+    if (obj[k] != null && String(obj[k]).trim() !== "") return String(obj[k]);
+  }
   return "";
 }
 
-// req.body が未パースでも動くようにする（念のため）
-async function getBody(req) {
-  if (req.body && typeof req.body === "object") return req.body;
+function normalizeTheme(raw) {
+  const s = String(raw || "").trim().toLowerCase();
 
-  const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
-  const raw = Buffer.concat(chunks).toString("utf8");
+  // already normalized
+  if (["love", "work", "money", "health"].includes(s)) return s;
 
-  // x-www-form-urlencoded
-  if (raw.includes("=") && raw.includes("&")) {
-    const out = {};
-    raw.split("&").forEach((pair) => {
-      const [k, v] = pair.split("=");
-      const key = decodeURIComponent(k || "");
-      const val = decodeURIComponent((v || "").replace(/\+/g, " "));
-      out[key] = val;
-    });
-    return out;
+  // Japanese -> key
+  if (s.includes("恋愛")) return "love";
+  if (s.includes("仕事")) return "work";
+  if (s.includes("金運") || s.includes("お金") || s.includes("財運")) return "money";
+  if (s.includes("健康")) return "health";
+
+  // also handle "money（金運）" みたいな形
+  if (s.startsWith("money")) return "money";
+  if (s.startsWith("love")) return "love";
+  if (s.startsWith("work")) return "work";
+  if (s.startsWith("health")) return "health";
+
+  // fallback
+  return "love";
+}
+
+function parseCardId(pasted) {
+  const text = String(pasted || "");
+  // card_id:xxxx / card_id=xxxx / "card_id: xxxx"
+  const m = text.match(/card_id\s*[:=]\s*([a-z_0-9]+)\s*/i);
+  if (m && m[1]) return m[1].trim();
+  return "";
+}
+
+function cardPath(cardId) {
+  // major_00..major_21
+  if (/^major_\d{2}$/i.test(cardId)) {
+    return path.join("cards", "common", "major", `${cardId.toLowerCase()}.json`);
+  }
+  // minor: cups_01..14 / wands_01..14 / swords_01..14 / pentacles_01..14
+  if (/^(cups|wands|swords|pentacles)_\d{2}$/i.test(cardId)) {
+    return path.join("cards", "common", "minor", `${cardId.toLowerCase()}.json`);
+  }
+  return "";
+}
+
+function readJson(relPath) {
+  // Vercel の実行パス基準で読む（includeFiles で同梱される前提）
+  const abs = path.join(process.cwd(), relPath);
+  return JSON.parse(fs.readFileSync(abs, "utf8"));
+}
+
+// free フィールド分割（安全側で 240 に）
+function splitToChunks(text, maxLen = 240, maxParts = 4) {
+  const t = String(text || "").replace(/\r\n/g, "\n");
+  const parts = [];
+  let rest = t;
+
+  while (rest.length > 0 && parts.length < maxParts) {
+    if (rest.length <= maxLen) {
+      parts.push(rest);
+      rest = "";
+      break;
+    }
+    // なるべく改行で切る（見栄え）
+    let cut = rest.lastIndexOf("\n", maxLen);
+    if (cut < Math.floor(maxLen * 0.6)) cut = maxLen;
+    parts.push(rest.slice(0, cut));
+    rest = rest.slice(cut).replace(/^\n+/, "");
   }
 
-  // json
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return {};
+  // 余りは最後に押し込む（超過は諦める）
+  if (rest.length > 0) {
+    parts[parts.length - 1] = (parts[parts.length - 1] + "\n" + rest).slice(0, maxLen);
   }
+
+  // 常に maxParts 個返す
+  while (parts.length < maxParts) parts.push("");
+  return parts;
 }
 
-function buildText({ common, themeAdd, themeKey }) {
-  // common は cards/common の1枚分
-  // themeAdd は cards/theme/{theme}.json のカードID別文章（無いこともある）
+async function postForm(url, bodyObj) {
+  const form = new URLSearchParams();
+  for (const [k, v] of Object.entries(bodyObj)) {
+    form.append(k, v == null ? "" : String(v));
+  }
 
-  const title = common?.title || "";
-  const message = common?.message || "";
-  const focus = common?.focus || "";
-  const action = common?.action || "";
-
-  const add = safeStr(themeAdd || "").trim();
-
-  // short（LINE吹き出し用）= まず theme 文章、なければ common の line.short
-  const short =
-    (themeAdd && safeStr(themeAdd).trim()) ||
-    safeStr(common?.line?.short) ||
-    `今日は「${title}」の整え。小さくでOKです🌿`;
-
-  // long（結果ページ用）
-  const long =
-`🌿 今日の整えワンポイント（詳細）
-
-【カード】${title}
-${message}
-
-【意識すること】
-・${focus.split("\n").join("\n・")}
-
-【今日の一手】
-・${action.split("\n").join("\n・")}
-
-${add ? `【テーマ別：${themeKey}】
-${add}
-` : ""}
-
-🌙 焦らなくて大丈夫。整えた分だけ、現実がついてきます。`;
-
-  return { short: short.trim(), long: long.trim() };
-}
-
-function themeLabel(theme) {
-  if (theme === "money") return "金運";
-  if (theme === "work") return "仕事";
-  if (theme === "health") return "健康";
-  return "恋愛";
-}
-
-async function writeBack(payload) {
-  // Node18+ fetch
-  const res = await fetch(WRITEBACK_URL, {
+  const res = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded;charset=UTF-8" },
-    body: new URLSearchParams(payload).toString(),
+    body: form.toString(),
   });
-  return res;
+
+  const txt = await res.text().catch(() => "");
+  return { ok: res.ok, status: res.status, text: txt };
 }
 
-// ===== handler =====
+// =========================
+// main
+// =========================
 module.exports = async (req, res) => {
   try {
-    const body = await getBody(req);
-
-    const uid = safeStr(body.uid || body["form_sendd"] || body["user_id"] || "").trim();
-    const pasted =
-      safeStr(body.pasted || body["form_data[pasted]"] || body["form11-1"] || body["form_data[form11-1]"] || "");
-
-    // theme
-    const themeInfo = extractTheme(body);
-    const theme = themeInfo.theme; // love/work/money/health
-    const themeRaw = themeInfo.raw;
-
-    // cardId
-    const cardIdRaw = extractCardIdFromPasted(pasted);
-    const cardId = sanitizeId(cardIdRaw);
-
-    console.log("[tarot-love] uid:", uid);
-    console.log("[tarot-love] themeRaw:", themeRaw);
-    console.log("[tarot-love] theme:", theme);
-    console.log("[tarot-love] pasted head:", normalizeSpace(pasted).slice(0, 80));
-    console.log("[tarot-love] cardId:", cardId);
-
-    if (!uid || !cardId) {
-      // 400で落とさず、結果未保存のメッセージを保存して返す（cp21で赤枠を出せる）
-      const msgShort = "まだ結果が保存されていないようです。";
-      const msgLong =
-        "まだ結果が保存されていないようです。\n「続き（整えワンポイント）」画面に戻り、カード結果の貼り付けとテーマ選択をして送信してください🌿";
-
-      const [l1, l2] = splitByLimit(msgLong, FREE_LIMIT);
-
-      await writeBack({
-        uid,
-        free2: msgShort,
-        free5: l1,
-        free6: l2,
-        free3: cardId || "",
-        free4: theme || "love",
-      });
-
-      return res.status(200).json({ ok: true, fallback: true });
+    if (req.method !== "POST") {
+      res.statusCode = 405;
+      return res.end("Method Not Allowed");
     }
 
-    // common json path
-    const isMajor = /^major_\d{2}$/i.test(cardId);
-    const commonPath = isMajor
-      ? path.join(process.cwd(), "cards", "common", "major", `${cardId}.json`)
-      : path.join(process.cwd(), "cards", "common", "minor", `${cardId}.json`);
+    const body = await parseBody(req);
 
-    const themePath = path.join(process.cwd(), "cards", "theme", `${theme}.json`);
+    // uid
+    const uid = pick(body, ["uid", "basic_id", "user_id", "userId"]);
+    // form11 pasted
+    const pasted = pick(body, [
+      "form11-1",
+      "form_data[form11-1]",
+      "form_data[form11_1]",
+      "form_data[form11-1][]",
+      "form_data[form11_1][]",
+    ]);
 
-    console.log("[tarot-love] commonFrom:", commonPath);
-    console.log("[tarot-love] themeFrom:", themePath);
+    // theme (radio form11-5)
+    const themeRaw = pick(body, [
+      "form11-5",
+      "form_data[form11-5]",
+      "form_data[form11_5]",
+      "theme",
+      "form_data[theme]",
+    ]);
+    const theme = normalizeTheme(themeRaw);
 
-    // read files
+    log("uid:", uid);
+    log("themeRaw:", themeRaw);
+    log("theme:", theme);
+
+    // pasted head (for debug)
+    log("pasted head:", String(pasted || "").slice(0, 120).replace(/\n/g, "\\n"));
+
+    const cardId = parseCardId(pasted);
+    if (!cardId) {
+      res.statusCode = 400;
+      return res.end("Bad Request: card_id not found");
+    }
+    log("cardId:", cardId);
+
+    // read common card json
+    const rel = cardPath(cardId);
+    if (!rel) {
+      res.statusCode = 400;
+      return res.end("Bad Request: unknown card_id format");
+    }
+
     let common;
     try {
-      common = readJson(commonPath);
+      common = readJson(rel);
     } catch (e) {
-      console.log("[tarot-love] ERROR common read:", e?.message || e);
-      // ここでも落とさない
-      common = { title: cardId, message: "カード情報の読み込みに失敗しました。", focus: "確認", action: "カードIDを見直す", line: { short: `今日は「${cardId}」の整え。小さくでOKです🌿` } };
+      // ここが ENOENT の本丸。includeFiles が効いてないと起きる。
+      log("ERROR reading common json:", e?.message || e);
+      res.statusCode = 500;
+      return res.end("Server Error: card json not found in deployment. Check vercel.json includeFiles.");
     }
 
-    let themeJson = {};
+    // theme addon json
+    let addon = {};
     try {
-      themeJson = readJson(themePath);
+      addon = readJson(path.join("cards", "theme", `${theme}.json`));
     } catch (e) {
-      console.log("[tarot-love] WARN theme read:", e?.message || e);
-      themeJson = {};
+      // addon は無くても致命傷にしない
+      log("addon read skipped:", e?.message || e);
+      addon = {};
     }
 
-    // themeAdd: themeJson[cardId] があれば使う（無ければ空）
-    const themeAdd = themeJson?.[cardId] || "";
+    const themeText = addon[cardId] || ""; // テーマ別の一文
+    const line = common?.line || {};
+    const shortText = String(line.short || common.message || "").trim();
 
-    const { short, long } = buildText({
-      common,
-      themeAdd,
-      themeKey: themeLabel(theme),
-    });
+    // long base: まず「カード詳細」
+    const longBase =
+      String(line.long || line.full || "").trim() ||
+      [
+        "🌿 今日の整えワンポイント（詳細）",
+        "",
+        `【カード】 ${common.title || cardId}`,
+        common.message ? `\n${common.message}` : "",
+        common.focus ? `\n\n【意識すること】\n${common.focus}` : "",
+        common.action ? `\n\n【今日の1アクション】\n${common.action}` : "",
+      ].join("");
 
-    // longを free5/free6 に分割（free1は短い制限があるのでメインでは使わない）
-    const [long1, long2] = splitByLimit(long, FREE_LIMIT);
+    // upsell/誘導（必要ならここに固定文で）
+    const cta =
+      "\n\n―――\n" +
+      "🌿 もっと深く整えたい方へ\n" +
+      "LINEから「個別整え（有料）」もご案内できます。\n" +
+      "気になる方は「個別」と送ってください。";
 
-    console.log("[tarot-love] len free2(short):", short.length);
-    console.log("[tarot-love] len free5(long1):", long1.length);
-    console.log("[tarot-love] len free6(long2):", long2.length);
+    // theme addon を本文に差し込み
+    const themed =
+      (themeText ? `\n\n【テーマ別メッセージ】\n${themeText}` : "") + cta;
 
-    // writeBack
-    const wb = await writeBack({
-      uid,
-      free2: short,     // 短文
-      free5: long1,     // 長文1
-      free6: long2,     // 長文2
-      free3: cardId,    // デバッグ用
-      free4: theme,     // デバッグ用
-    });
+    const longText = (longBase + themed).trim();
 
-    console.log("[tarot-love] writeBack status:", wb.status);
+    // 文字数ログ
+    log("len short:", shortText.length);
+    log("len long:", longText.length);
 
-    return res.status(200).json({ ok: true });
+    // ProLine writeBack URL（あなたのログに出てた form12 のURLを body から拾う）
+    // ※固定で持ってるならここを固定してもOK
+    const writeBackUrl = pick(body, [
+      "writeBack",
+      "write_back",
+      "writeback",
+      "callback",
+      "callback_url",
+    ]);
+
+    // もし query に writeBack が付く運用ならそれも拾う
+    const reqUrl = new URL(req.url, "https://dummy.local");
+    const writeBackFromQuery = reqUrl.searchParams.get("writeBack") || "";
+    const wb = writeBackUrl || writeBackFromQuery;
+
+    if (!wb) {
+      res.statusCode = 400;
+      return res.end("Bad Request: writeBack url not provided");
+    }
+    log("writeBack POST:", wb);
+
+    // 保存先：
+    // short -> free6
+    // long  -> free5/free1/free3/free4（4分割）
+    const [p1, p2, p3, p4] = splitToChunks(longText, 240, 4);
+
+    const payload = {
+      uid: uid,
+
+      // 表示用
+      free6: shortText,
+      free5: p1,
+      free1: p2,
+      free3: p3,
+      free4: p4,
+
+      // デバッグ保険（必要なら）
+      // free2: `theme=${theme} card=${cardId}`,
+
+      // 旧互換（もし cp21 が free2/free1 を見てる場合の保険）
+      free2: shortText,
+    };
+
+    const result = await postForm(wb, payload);
+    log("writeBack status:", result.status);
+
+    if (!result.ok) {
+      res.statusCode = 502;
+      return res.end(`Bad Gateway: writeBack failed (${result.status})`);
+    }
+
+    res.statusCode = 200;
+    return res.end("OK");
   } catch (e) {
     console.log("[tarot-love] FATAL:", e);
-    // ここでも 200 で返す（ProLine側の動作を止めない）
-    return res.status(200).json({ ok: false, error: String(e?.message || e) });
+    res.statusCode = 500;
+    return res.end("Server Error");
   }
 };
