@@ -1,3 +1,4 @@
+
 // /api/tarot-love.js
 // CommonJS (Vercel Node)
 // 役割：form11(入力) → カード＆テーマを抽出 → cards json を読み込み → form12へ writeBack（freeだけで出力）
@@ -138,16 +139,25 @@ async function readBody(req) {
   });
 }
 
-async function postForm(url, formObj) {
-  // Node18 fetch
-  const body = new URLSearchParams(formObj).toString();
-  const res = await fetch(url, {
+async function postForm(url, data) {
+  // ProLineは「application/x-www-form-urlencoded」が安定
+  const params = new URLSearchParams();
+
+  for (const [k, v] of Object.entries(data || {})) {
+    // undefined / null は空文字にして「上書き消去」できるようにする
+    params.set(k, v == null ? "" : String(v));
+  }
+
+  const r = await fetch(url, {
     method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body,
+    headers: {
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+    },
+    body: params.toString(),
   });
-  const text = await res.text().catch(() => "");
-  return { ok: res.ok, status: res.status, text };
+
+  const text = await r.text().catch(() => "");
+  return { ok: r.ok, status: r.status, text };
 }
 
 module.exports = async (req, res) => {
