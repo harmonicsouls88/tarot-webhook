@@ -20,10 +20,6 @@ function pickCardId(pasted) {
   return "";
 }
 
-function isMajor(cardId) {
-  return /^major_\d{2}$/.test(cardId);
-}
-
 function detectSuit(cardId) {
   if (cardId.startsWith("cups_")) return "cups";
   if (cardId.startsWith("swords_")) return "swords";
@@ -38,7 +34,6 @@ function readJsonIfExists(p) {
   try {
     return JSON.parse(raw);
   } catch (e) {
-    // どのファイルが壊れてるか分かるようにする
     const msg = `[JSON_PARSE_ERROR] file=${p} :: ${e.message}`;
     console.error(msg);
     throw new Error(msg);
@@ -59,21 +54,21 @@ function detectTheme(body, pasted) {
   if (tf && ["love", "work", "money", "health"].includes(tf)) return tf;
 
   const m = String(pasted || "").match(/^\s*theme\s*[:=]\s*(love|work|money|health)\s*$/mi);
-  return m?.[1] ?? "love"; // 迷ったら love に倒す（必要なら work に変更OK）
+  return m?.[1] ?? "love";
 }
 
-// ✅ cards/common 配下のカードを読む（今の構成に合わせる）
+// ✅ cards/common 配下のカードを読む
 function loadCommonCard(cardId) {
   const cwd = process.cwd();
   const suit = detectSuit(cardId);
 
   const candidates = [
-    // 新構成（推奨）
+    // 新構成
     path.join(cwd, "cards", "common", "major", `${cardId}.json`),
     path.join(cwd, "cards", "common", "minor", `${cardId}.json`),
     suit ? path.join(cwd, "cards", "common", "minor", `${cardId}.json`) : null,
 
-    // 旧構成も一応フォールバック（残ってても動くように）
+    // 旧構成フォールバック
     path.join(cwd, "cards", "major", `${cardId}.json`),
     path.join(cwd, "cards", "minor", `${cardId}.json`),
     path.join(cwd, "cards", `${cardId}.json`),
@@ -87,24 +82,22 @@ function loadCommonCard(cardId) {
   return { card: null, from: candidates };
 }
 
-// ✅ cards/theme/<theme>.json から「追記」を読む（1ファイル方式）
+// ✅ cards/theme/<theme>.json から追記を読む
 function loadThemeAddon(theme, cardId) {
   const cwd = process.cwd();
   const p = path.join(cwd, "cards", "theme", `${theme}.json`);
   const j = readJsonIfExists(p);
   if (!j) return { addon: null, from: p };
 
-  // ✅ 1) { "append": { "cups_02": "..." } }  ←あなたの今の形
+  // 1) { "append": { "cups_02": "..." } }
   if (j.append && j.append[cardId]) {
     return { addon: { message: j.append[cardId] }, from: p };
   }
-
-  // ✅ 2) { "cards": { "cups_02": { message: "..." } } }
+  // 2) { "cards": { "cups_02": { message: "..." } } }
   if (j.cards && j.cards[cardId]) {
     return { addon: j.cards[cardId], from: p };
   }
-
-  // ✅ 3) { "cups_02": { message: "..." } } or { "cups_02": "..." }
+  // 3) { "cups_02": { message: "..." } } or { "cups_02": "..." }
   if (j[cardId]) {
     const v = j[cardId];
     if (typeof v === "string") return { addon: { message: v }, from: p };
@@ -114,24 +107,21 @@ function loadThemeAddon(theme, cardId) {
   return { addon: null, from: p };
 }
 
-// ✅ 共通カードにテーマ追記をマージ（message 追記が中心）
+// ✅ 共通カード + テーマ追記をマージ
 function mergeCard(commonCard, addon) {
   if (!commonCard) return null;
   if (!addon) return commonCard;
 
   const merged = { ...commonCard };
 
-  // message を追記（もっとも自然）
   if (addon.message) {
     const base = merged.message ? String(merged.message) : "";
     merged.message = base ? `${base}\n\n${addon.message}` : String(addon.message);
   }
 
-  // focus/action をテーマ用に上書きしたい場合（任意）
   if (addon.focus) merged.focus = addon.focus;
   if (addon.action) merged.action = addon.action;
 
-  // short/long の追記も対応（任意）
   if (addon.line?.short) merged.line = { ...(merged.line || {}), short: addon.line.short };
   if (addon.line?.long) merged.line = { ...(merged.line || {}), long: addon.line.long };
 
@@ -230,7 +220,8 @@ async function readBody(req) {
 }
 
 // --------------------
-// ProLineへ書き戻し（form12-1 / form12-2）
+// ProLineへ書き戻し
+// ★ form12-1/2 + form_data[...] + free1/2 を全部送る（最強安定）
 // --------------------
 async function writeBackToProLine(uid, payloadObj) {
   const formId = process.env.PROLINE_FORM12_ID;
@@ -240,13 +231,13 @@ async function writeBackToProLine(uid, payloadObj) {
   const url = `${fmBase}/${formId}`;
 
   const params = new URLSearchParams({ uid });
-  for (const [k, v] of Object.entries(payloadObj)) {
+  for (const [k, v] of Object.entries(payloadObj || {})) {
     if (v == null) continue;
     params.set(k, String(v));
   }
 
   console.log("[tarot-love] writeBack POST:", url);
-  console.log("[tarot-love] writeBack keys:", Object.keys(payloadObj));
+  console.log("[tarot-love] writeBack keys:", Object.keys(payloadObj || {}));
   console.log("[tarot-love] writeBack body head:", params.toString().slice(0, 220));
 
   const r = await fetch(url, {
@@ -259,11 +250,28 @@ async function writeBackToProLine(uid, payloadObj) {
   return { status: r.status, url, rawSnippet: text.slice(0, 220) };
 }
 
+function buildWriteBackPayload(shortText, longText) {
+  return {
+    // ✅ cp21の [[form12-1]] / [[form12-2]] 向け（まずこれが本命）
+    "form12-2": shortText,
+    "form12-1": longText,
+
+    // ✅ 旧/別実装の保険（残しておくと事故が減る）
+    "form_data[form12-2]": shortText,
+    "form_data[form12-1]": longText,
+
+    // ✅ ユーザー情報（free）にも保存しておく（将来 cp21を [[free1]]/[[free2]] にしてもOK）
+    "free2": shortText,
+    "free1": longText,
+  };
+}
+
 // --------------------
 // handler
 // --------------------
 module.exports = async (req, res) => {
   try {
+    // GET：デバッグ用
     if (req.method === "GET") {
       const uid = String(req.query?.uid || "test");
       const pasted = String(req.query?.pasted || "");
@@ -292,10 +300,12 @@ module.exports = async (req, res) => {
     const body = await readBody(req);
 
     const uid = String(body?.uid || req.query?.uid || "");
+
+    // pasted の取り出し（複数パターンに対応）
     const pasted =
       String(body?.["form_data[form11-1]"] || "") ||
-      String(body?.["form_data[form12-1]"] || "") ||
       String(body?.["form11-1"] || "") ||
+      String(body?.["form_data[form12-1]"] || "") ||
       String(body?.["form12-1"] || "") ||
       String(body?.["txt[zeRq0T9Qo1]"] || "") ||
       String(body?.pasted || "");
@@ -310,6 +320,7 @@ module.exports = async (req, res) => {
 
     if (!uid) return res.status(200).json({ ok: true, skipped: true, reason: "uid missing" });
 
+    // card_id が取れない場合
     if (!cardId) {
       const short =
         "🙏 うまく読み取れませんでした。\n" +
@@ -318,13 +329,11 @@ module.exports = async (req, res) => {
         short +
         "\n\n（例）\ncard_id:major_09\ncard_id:swords_07\n\nそのままコピーして貼るのが確実です🌿";
 
-      const writeBack = await writeBackToProLine(uid, {
-        "form_data[form12-2]": short,
-        "form_data[form12-1]": long,
-      });
+      const writeBack = await writeBackToProLine(uid, buildWriteBackPayload(short, long));
       return res.status(200).json({ ok: true, uid, fallback: true, writeBack });
     }
 
+    // カード読み込み
     const { card: common, from: commonFrom } = loadCommonCard(cardId);
     const { addon, from: themeFrom } = loadThemeAddon(theme, cardId);
     const card = mergeCard(common, addon);
@@ -341,25 +350,18 @@ module.exports = async (req, res) => {
         short +
         "\n\n（原因例）\n・途中で文章が欠けた\n・card_idの行が消えた\n・余計な改行が入った";
 
-      const writeBack = await writeBackToProLine(uid, {
-        "form_data[form12-2]": short,
-        "form_data[form12-1]": long,
-      });
-
+      const writeBack = await writeBackToProLine(uid, buildWriteBackPayload(short, long));
       return res.status(200).json({ ok: true, uid, theme, cardId, found: false, writeBack });
     }
 
-    // ✅ form12-1 / form12-2 に保存（cp21がこれを表示）
+    // ✅ ここが本番の保存
     const cta = getCtaByTheme(theme, uid);
     const shortText = buildTextShort(cardId, card);
     const longText = buildTextLong(cardId, card, cta);
 
-    const writeBack = await writeBackToProLine(uid, {
-      "form_data[form12-2]": shortText,
-      "form_data[form12-1]": longText,
-    });
+    const writeBack = await writeBackToProLine(uid, buildWriteBackPayload(shortText, longText));
 
-      return res.status(200).json({
+    return res.status(200).json({
       ok: true,
       uid,
       theme,
@@ -367,8 +369,8 @@ module.exports = async (req, res) => {
       found: true,
       commonFrom,
       themeFrom,
-      shortPreview: buildTextShort(cardId, card),
-      longPreview: buildTextLong(cardId, card, getCtaByTheme(theme, uid)),
+      shortPreview: shortText,
+      longPreview: longText,
       writeBack,
     });
   } catch (e) {
