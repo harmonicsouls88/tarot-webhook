@@ -8,13 +8,13 @@ const path = require("path");
 function pickCardId(pasted) {
   const s = String(pasted || "");
 
-  // 1) 「行としての card_id:xxxx」だけ拾う（複数あれば最後）
+  // ✅「行としての card_id:xxxx」だけ拾う → 最初を採用（上の方＝今回のカードになりやすい）
   const matches = [...s.matchAll(/^\s*card_id\s*[:=]\s*([A-Za-z0-9_]+)\s*$/gmi)];
-  if (matches.length) return matches[matches.length - 1][1];
+  if (matches.length) return matches[0][1];
 
-  // 2) 保険：どこでもいいから拾う（最後）
+  // ✅ 保険：どこでも拾う → 最初を採用
   const matches2 = [...s.matchAll(/card_id\s*[:=]\s*([A-Za-z0-9_]+)/gmi)];
-  if (matches2.length) return matches2[matches2.length - 1][1];
+  if (matches2.length) return matches2[0][1];
 
   return "";
 }
