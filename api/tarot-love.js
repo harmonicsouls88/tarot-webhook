@@ -224,6 +224,8 @@ function buildTextLong(cardId, card, cta) {
 
   return base + ctaBlock;
 }
+console.log("[tarot-love] len free2(short):", shortText.length);
+console.log("[tarot-love] len free1(long):", longText.length);
 
 async function readBody(req) {
   if (req.body && typeof req.body === "object") return req.body;
@@ -234,8 +236,7 @@ async function readBody(req) {
   const raw = Buffer.concat(chunks).toString("utf8");
   return qs.parse(raw);
 }
-console.log("[tarot-love] len free2(short):", shortText.length);
-console.log("[tarot-love] len free1(long):", longText.length);
+
 
 // --------------------
 // ProLineへ書き戻し（free1/free2 を主に）
