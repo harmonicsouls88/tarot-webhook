@@ -218,14 +218,15 @@ function buildTextLong(cardId, card, cta) {
     ].join("\n");
   }
 
+  console.log("[tarot-love] len free2(short):", shortText.length);
+console.log("[tarot-love] len free1(long):", longText.length);
+
   const ctaBlock = cta?.url
     ? `\n\n———\n${cta.preline}\n${cta.label}\n${cta.url}`
     : "";
 
   return base + ctaBlock;
 }
-console.log("[tarot-love] len free2(short):", shortText.length);
-console.log("[tarot-love] len free1(long):", longText.length);
 
 async function readBody(req) {
   if (req.body && typeof req.body === "object") return req.body;
