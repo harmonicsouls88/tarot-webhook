@@ -40,30 +40,86 @@ function readJsonIfExists(p) {
   }
 }
 
-// theme:love / theme:work / theme:money / theme:health
-function detectTheme(body, pasted) {
-  const b = body || {};
-  const fromForm =
-    b["sel[theme]"] ||
-    b["theme"] ||
-    b["form_data[sel[theme]]"] ||
-    b["form_data[theme]"] ||
-    "";
-  const tf = String(fromForm || "").trim();
+// --------------------
+// THEME detection (強化版)
+// --------------------
+function normalizeThemeWord(v) {
+  const s = String(v || "").trim().toLowerCase();
+  if (!s) return "";
 
-  if (tf && ["love", "work", "money", "health"].includes(tf)) return tf;
+  // 英語・短縮
+  if (["love", "l"].includes(s)) return "love";
+  if (["work", "job", "w"].includes(s)) return "work";
+  if (["money", "finance", "m"].includes(s)) return "money";
+  if (["health", "body", "h"].includes(s)) return "health";
 
-  const m = String(pasted || "").match(/^\s*theme\s*[:=]\s*(love|work|money|health)\s*$/mi);
-  return m?.[1] ?? "love";
+  // 日本語
+  if (s.includes("恋")) return "love";
+  if (s.includes("仕事") || s.includes("お仕事") || s.includes("職")) return "work";
+  if (s.includes("金") || s.includes("お金") || s.includes("金運") || s.includes("財")) return "money";
+  if (s.includes("健康") || s.includes("体調") || s.includes("身体") || s.includes("からだ")) return "health";
+
+  return "";
 }
 
-// ✅ cards/common 配下のカードを読む
+function firstNonEmpty(...vals) {
+  for (const v of vals) {
+    const s = String(v ?? "").trim();
+    if (s) return s;
+  }
+  return "";
+}
+
+function detectTheme(body, pasted, reqQuery) {
+  const b = body || {};
+  const q = reqQuery || {};
+
+  // 1) まずは URL パラメータ（GET/POSTどちらでも）を最優先で見る
+  const fromQuery = firstNonEmpty(q.theme, q["theme"]);
+
+  // 2) ProLineフォームのよくある入ってくる場所（網羅）
+  const fromBody = firstNonEmpty(
+    b["sel[theme]"],
+    b["theme"],
+    b["form_data[sel[theme]]"],
+    b["form_data[theme]"],
+
+    // ここ重要：フォーム質問に「恋愛or仕事」みたいな自由記述がある時
+    b["form_data[form11-2]"],
+    b["form11-2"],
+    b["form_data[form12-2]"],
+    b["form12-2"],
+
+    // 埋め込みHTMLの textarea から来る可能性
+    b["txt[ZXK8jMNQJ0]"],
+    b["txt[zeRq0T9Qo1]"]
+  );
+
+  // 3) pasted 内に theme:xxx が書かれているケース
+  const fromPastedLine = String(pasted || "").match(
+    /^\s*theme\s*[:=]\s*(love|work|money|health|恋愛|仕事|金運|健康)\s*$/mi
+  )?.[1];
+
+  // 4) さらに pasted に「#金運」などが混じるケースも拾う
+  const fromPastedLoose =
+    String(pasted || "").match(/(恋愛|仕事|金運|健康|love|work|money|health)/i)?.[1];
+
+  // 優先順：query → body → pasted
+  const raw = firstNonEmpty(fromQuery, fromBody, fromPastedLine, fromPastedLoose);
+  const norm = normalizeThemeWord(raw);
+
+  return norm || "love"; // 最後の最後だけ love
+}
+
+// --------------------
+// load cards
+// --------------------
 function loadCommonCard(cardId) {
   const cwd = process.cwd();
   const suit = detectSuit(cardId);
 
   const candidates = [
-    // 新構成
+    // 新構成（推奨）
     path.join(cwd, "cards", "common", "major", `${cardId}.json`),
     path.join(cwd, "cards", "common", "minor", `${cardId}.json`),
     suit ? path.join(cwd, "cards", "common", "minor", `${cardId}.json`) : null,
@@ -82,7 +138,6 @@ function loadCommonCard(cardId) {
   return { card: null, from: candidates };
 }
 
-// ✅ cards/theme/<theme>.json から追記を読む
 function loadThemeAddon(theme, cardId) {
   const cwd = process.cwd();
   const p = path.join(cwd, "cards", "theme", `${theme}.json`);
@@ -93,10 +148,12 @@ function loadThemeAddon(theme, cardId) {
   if (j.append && j.append[cardId]) {
     return { addon: { message: j.append[cardId] }, from: p };
   }
+
   // 2) { "cards": { "cups_02": { message: "..." } } }
   if (j.cards && j.cards[cardId]) {
     return { addon: j.cards[cardId], from: p };
   }
+
   // 3) { "cups_02": { message: "..." } } or { "cups_02": "..." }
   if (j[cardId]) {
     const v = j[cardId];
@@ -107,7 +164,6 @@ function loadThemeAddon(theme, cardId) {
   return { addon: null, from: p };
 }
 
-// ✅ 共通カード + テーマ追記をマージ
 function mergeCard(commonCard, addon) {
   if (!commonCard) return null;
   if (!addon) return commonCard;
@@ -118,7 +174,6 @@ function mergeCard(commonCard, addon) {
     const base = merged.message ? String(merged.message) : "";
     merged.message = base ? `${base}\n\n${addon.message}` : String(addon.message);
   }
-
   if (addon.focus) merged.focus = addon.focus;
   if (addon.action) merged.action = addon.action;
 
@@ -220,8 +275,7 @@ async function readBody(req) {
 }
 
 // --------------------
-// ProLineへ書き戻し
-// ★ form12-1/2 + form_data[...] + free1/2 を全部送る（最強安定）
+// ProLineへ書き戻し（form12-1 / form12-2：両対応）
 // --------------------
 async function writeBackToProLine(uid, payloadObj) {
   const formId = process.env.PROLINE_FORM12_ID;
@@ -231,14 +285,16 @@ async function writeBackToProLine(uid, payloadObj) {
   const url = `${fmBase}/${formId}`;
 
   const params = new URLSearchParams({ uid });
-  for (const [k, v] of Object.entries(payloadObj || {})) {
+
+  // payloadObj は key/value なのでそのまま入れる
+  for (const [k, v] of Object.entries(payloadObj)) {
     if (v == null) continue;
     params.set(k, String(v));
   }
 
   console.log("[tarot-love] writeBack POST:", url);
-  console.log("[tarot-love] writeBack keys:", Object.keys(payloadObj || {}));
-  console.log("[tarot-love] writeBack body head:", params.toString().slice(0, 220));
+  console.log("[tarot-love] writeBack keys:", Object.keys(payloadObj));
+  console.log("[tarot-love] writeBack body head:", params.toString().slice(0, 240));
 
   const r = await fetch(url, {
     method: "POST",
@@ -247,23 +303,7 @@ async function writeBackToProLine(uid, payloadObj) {
   });
 
   const text = await r.text().catch(() => "");
-  return { status: r.status, url, rawSnippet: text.slice(0, 220) };
-}
-
-function buildWriteBackPayload(shortText, longText) {
-  return {
-    // ✅ cp21の [[form12-1]] / [[form12-2]] 向け（まずこれが本命）
-    "form12-2": shortText,
-    "form12-1": longText,
-
-    // ✅ 旧/別実装の保険（残しておくと事故が減る）
-    "form_data[form12-2]": shortText,
-    "form_data[form12-1]": longText,
-
-    // ✅ ユーザー情報（free）にも保存しておく（将来 cp21を [[free1]]/[[free2]] にしてもOK）
-    "free2": shortText,
-    "free1": longText,
-  };
+  return { status: r.status, url, rawSnippet: text.slice(0, 240) };
 }
 
 // --------------------
@@ -271,12 +311,11 @@ function buildWriteBackPayload(shortText, longText) {
 // --------------------
 module.exports = async (req, res) => {
   try {
-    // GET：デバッグ用
+    // GET（デバッグ用）
     if (req.method === "GET") {
       const uid = String(req.query?.uid || "test");
       const pasted = String(req.query?.pasted || "");
-      const body = { theme: String(req.query?.theme || "") };
-      const theme = detectTheme(body, pasted);
+      const theme = detectTheme({}, pasted, req.query);
 
       const cardId = pickCardId(pasted);
       const { card: common, from: commonFrom } = loadCommonCard(cardId);
@@ -292,7 +331,7 @@ module.exports = async (req, res) => {
         commonFrom,
         themeFrom,
         shortPreview: card ? buildTextShort(cardId, card) : "",
-        longPreview: card ? buildTextLong(cardId, card, getCtaByTheme(theme, uid)).slice(0, 200) : "",
+        longPreview: card ? buildTextLong(cardId, card, getCtaByTheme(theme, uid)).slice(0, 220) : "",
       });
     }
 
@@ -300,8 +339,6 @@ module.exports = async (req, res) => {
     const body = await readBody(req);
 
     const uid = String(body?.uid || req.query?.uid || "");
-
-    // pasted の取り出し（複数パターンに対応）
     const pasted =
       String(body?.["form_data[form11-1]"] || "") ||
       String(body?.["form11-1"] || "") ||
@@ -310,30 +347,38 @@ module.exports = async (req, res) => {
       String(body?.["txt[zeRq0T9Qo1]"] || "") ||
       String(body?.pasted || "");
 
-    const theme = detectTheme(body, pasted);
+    // ★ theme を強化検出（ここが今回のキモ）
+    const theme = detectTheme(body, pasted, req.query);
+
     const cardId = pickCardId(pasted);
 
     console.log("[tarot-love] uid:", uid);
     console.log("[tarot-love] theme:", theme);
-    console.log("[tarot-love] pasted head:", String(pasted || "").slice(0, 80));
+    console.log("[tarot-love] pasted head:", String(pasted || "").slice(0, 90));
     console.log("[tarot-love] cardId:", cardId);
 
     if (!uid) return res.status(200).json({ ok: true, skipped: true, reason: "uid missing" });
 
-    // card_id が取れない場合
+    // カードID取れない場合：エラー文章を書き戻し
     if (!cardId) {
       const short =
         "🙏 うまく読み取れませんでした。\n" +
         "貼り付け文の中に「card_id:xxxx」が入っているか確認してください。";
       const long =
         short +
-        "\n\n（例）\ncard_id:major_09\ncard_id:swords_07\n\nそのままコピーして貼るのが確実です🌿";
+        "\n\n（例）\ncard_id:major_09\ncard_id:swords_07\n\n表示された文章をそのままコピーして貼るのが確実です🌿";
 
-      const writeBack = await writeBackToProLine(uid, buildWriteBackPayload(short, long));
+      const writeBack = await writeBackToProLine(uid, {
+        // 受け側がどっちでも動くように両方送る
+        "form12-2": short,
+        "form12-1": long,
+        "form_data[form12-2]": short,
+        "form_data[form12-1]": long,
+      });
+
       return res.status(200).json({ ok: true, uid, fallback: true, writeBack });
     }
 
-    // カード読み込み
     const { card: common, from: commonFrom } = loadCommonCard(cardId);
     const { addon, from: themeFrom } = loadThemeAddon(theme, cardId);
     const card = mergeCard(common, addon);
@@ -350,16 +395,32 @@ module.exports = async (req, res) => {
         short +
         "\n\n（原因例）\n・途中で文章が欠けた\n・card_idの行が消えた\n・余計な改行が入った";
 
-      const writeBack = await writeBackToProLine(uid, buildWriteBackPayload(short, long));
+      const writeBack = await writeBackToProLine(uid, {
+        "form12-2": short,
+        "form12-1": long,
+        "form_data[form12-2]": short,
+        "form_data[form12-1]": long,
+      });
+
       return res.status(200).json({ ok: true, uid, theme, cardId, found: false, writeBack });
     }
 
-    // ✅ ここが本番の保存
+    // ✅ form12-1 / form12-2 を生成して保存
     const cta = getCtaByTheme(theme, uid);
     const shortText = buildTextShort(cardId, card);
     const longText = buildTextLong(cardId, card, cta);
 
-    const writeBack = await writeBackToProLine(uid, buildWriteBackPayload(shortText, longText));
+    const writeBack = await writeBackToProLine(uid, {
+      // 両方送る（受け側差分吸収）
+      "form12-2": shortText,
+      "form12-1": longText,
+      "form_data[form12-2]": shortText,
+      "form_data[form12-1]": longText,
+
+      // もし将来 free に逃がすならここをON（今は不要なら消してOK）
+      // "free2": shortText,
+      // "free1": longText,
+    });
 
     return res.status(200).json({
       ok: true,
