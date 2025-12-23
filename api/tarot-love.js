@@ -218,8 +218,6 @@ function buildTextLong(cardId, card, cta) {
     ].join("\n");
   }
 
-  console.log("[tarot-love] len free2(short):", shortText.length);
-console.log("[tarot-love] len free1(long):", longText.length);
 
   const ctaBlock = cta?.url
     ? `\n\n———\n${cta.preline}\n${cta.label}\n${cta.url}`
@@ -382,6 +380,9 @@ module.exports = async (req, res) => {
     const cta = getCtaByTheme(theme, uid);
     const shortText = buildTextShort(cardId, card);
     const longText = buildTextLong(cardId, card, cta);
+
+    console.log("[tarot-love] len free2(short):", shortText.length);
+    console.log("[tarot-love] len free1(long):", longText.length);
 
     // ✅ free に保存（cp21が読む）
     const writeBack = await writeBackToProLine(uid, {
