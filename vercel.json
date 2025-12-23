@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/tarot-love.js": {
+      "includeFiles": "cards/**"
+    }
+  }
+}
