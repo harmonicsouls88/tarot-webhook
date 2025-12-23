@@ -1,403 +1,215 @@
-// /api/tarot-love.js
+// /api/tarot-love.js  (CommonJS / Vercel Node)
 const fs = require("fs");
 const path = require("path");
-const qs = require("querystring");
+const https = require("https");
+const { URL } = require("url");
 
-// --------------------
-// helpers
-// --------------------
-function pickCardId(pasted) {
-  const s = String(pasted || "");
-
-  // 1) 「行としての card_id:xxxx」だけ拾う（複数あれば最後を採用）
-  const matches = [...s.matchAll(/^\s*card_id\s*[:=]\s*([A-Za-z0-9_]+)\s*$/gmi)];
-  if (matches.length) return matches[matches.length - 1][1];
-
-  // 2) 保険：どこでもいいから card_id を拾う（ただし最後を採用）
-  const matches2 = [...s.matchAll(/card_id\s*[:=]\s*([A-Za-z0-9_]+)/gmi)];
-  if (matches2.length) return matches2[matches2.length - 1][1];
-
-  return "";
+function safeStr(v) {
+  if (v == null) return "";
+  if (typeof v === "string") return v;
+  if (Array.isArray(v)) return v.join("\n");
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
 }
 
-function detectSuit(cardId) {
-  if (cardId.startsWith("cups_")) return "cups";
-  if (cardId.startsWith("swords_")) return "swords";
-  if (cardId.startsWith("wands_")) return "wands";
-  if (cardId.startsWith("pentacles_")) return "pentacles";
-  return "";
-}
-
-function readJsonIfExists(p) {
-  if (!p || !fs.existsSync(p)) return null;
+function readJson(filePath) {
+  const p = path.resolve(filePath);
   const raw = fs.readFileSync(p, "utf8");
-  try {
-    return JSON.parse(raw);
-  } catch (e) {
-    const msg = `[JSON_PARSE_ERROR] file=${p} :: ${e.message}`;
-    console.error(msg);
-    throw new Error(msg);
-  }
+  return JSON.parse(raw);
 }
 
-// theme:love / theme:work / theme:money / theme:health
-function detectTheme(body, pasted, query) {
-  const b = body || {};
-  const q = query || {};
-
-  // ✅ 1) フォームから来る可能性のある key を全部拾う
-  const fromForm =
-    b["sel[theme]"] ||
-    b["theme"] ||
-    b["form_data[sel[theme]]"] ||
-    b["form_data[theme]"] ||
-    b["txt[theme]"] ||
-    "";
-
-  const tf = String(fromForm || "").trim();
-  if (tf && ["love", "work", "money", "health"].includes(tf)) return tf;
-
-  // ✅ 2) URLクエリ（cp27→form11 URL の ?theme=money を拾う）
-  const tq = String(q.theme || "").trim();
-  if (tq && ["love", "work", "money", "health"].includes(tq)) return tq;
-
-  // ✅ 3) pasted 側に theme:money を混ぜる運用にも対応
-  const m = String(pasted || "").match(/^\s*theme\s*[:=]\s*(love|work|money|health)\s*$/mi);
-  if (m?.[1]) return m[1];
-
-  return "love"; // 迷ったら love
+function normalizeTheme(x) {
+  const t = safeStr(x).trim().toLowerCase();
+  if (["love","work","money","health"].includes(t)) return t;
+  // 日本語が来た場合の救済
+  if (t.includes("恋")) return "love";
+  if (t.includes("仕")) return "work";
+  if (t.includes("金")) return "money";
+  if (t.includes("健")) return "health";
+  return "";
 }
 
-// ✅ cards/common 配下のカードを読む
-function loadCommonCard(cardId) {
-  const cwd = process.cwd();
-  const suit = detectSuit(cardId);
-
-  const candidates = [
-    path.join(cwd, "cards", "common", "major", `${cardId}.json`),
-    path.join(cwd, "cards", "common", "minor", `${cardId}.json`),
-    suit ? path.join(cwd, "cards", "common", "minor", `${cardId}.json`) : null,
-
-    // 旧構成フォールバック
-    path.join(cwd, "cards", "major", `${cardId}.json`),
-    path.join(cwd, "cards", "minor", `${cardId}.json`),
-    path.join(cwd, "cards", `${cardId}.json`),
-    suit ? path.join(cwd, "cards", suit, `${cardId}.json`) : null,
-  ].filter(Boolean);
-
-  for (const p of candidates) {
-    const j = readJsonIfExists(p);
-    if (j) return { card: j, from: p };
-  }
-  return { card: null, from: candidates };
+function extractThemeFromPasted(pasted) {
+  const s = safeStr(pasted);
+  const m = s.match(/^\s*theme\s*[:=]\s*(love|work|money|health)\s*$/mi);
+  return m ? m[1].toLowerCase() : "";
 }
 
-// ✅ cards/theme/<theme>.json から追記を読む（1ファイル方式）
-function loadThemeAddon(theme, cardId) {
-  const cwd = process.cwd();
-  const p = path.join(cwd, "cards", "theme", `${theme}.json`);
-  const j = readJsonIfExists(p);
-  if (!j) return { addon: null, from: p };
-
-  // 1) { "append": { "cups_02": "..." } }
-  if (j.append && j.append[cardId]) return { addon: { message: j.append[cardId] }, from: p };
-
-  // 2) { "cards": { "cups_02": { message: "..." } } }
-  if (j.cards && j.cards[cardId]) return { addon: j.cards[cardId], from: p };
-
-  // 3) { "cups_02": { message: "..." } } or { "cups_02": "..." }
-  if (j[cardId]) {
-    const v = j[cardId];
-    if (typeof v === "string") return { addon: { message: v }, from: p };
-    return { addon: v, from: p };
-  }
-
-  return { addon: null, from: p };
+function extractCardIdFromPasted(pasted) {
+  const s = safeStr(pasted);
+  // card_id:xxx / cardId:xxx / card_id=xxx などを許容
+  const m = s.match(/^\s*(card_id|cardId)\s*[:=]\s*([a-z_0-9]+)\s*$/mi);
+  return m ? m[2] : "";
 }
 
-// ✅ 共通カードにテーマ追記をマージ
-function mergeCard(commonCard, addon) {
-  if (!commonCard) return null;
-  if (!addon) return commonCard;
-
-  const merged = { ...commonCard };
-
-  if (addon.message) {
-    const base = merged.message ? String(merged.message) : "";
-    merged.message = base ? `${base}\n\n${addon.message}` : String(addon.message);
-  }
-
-  if (addon.focus) merged.focus = addon.focus;
-  if (addon.action) merged.action = addon.action;
-
-  if (addon.line?.short) merged.line = { ...(merged.line || {}), short: addon.line.short };
-  if (addon.line?.long) merged.line = { ...(merged.line || {}), long: addon.line.long };
-
-  return merged;
+function cardToPaths(cardId) {
+  // 期待: major_00.. / cups_01.. / wands_.. / swords_.. / pentacles_..
+  const isMajor = cardId.startsWith("major_");
+  const base = isMajor ? "major" : "minor";
+  const commonFrom = `/var/task/cards/common/${base}/${cardId}.json`;
+  return { commonFrom };
 }
 
-// --------------------
-// CTA（テーマ別）
-// --------------------
-const THEME_CTA = {
-  love: {
-    preline: "今日のカードを現実に変える一歩が欲しいなら👇",
-    label: "💗 恋を動かす整えガイド（通話30分）",
-    url: "https://l8x1uh5r.autosns.app/cp/gZKP8WdkE6?uid=[[uid]]",
-  },
-  work: {
-    preline: "このまま終わらせず、次の一手を決めるなら👇",
-    label: "💼 仕事の次の一手ガイド（通話30分）",
-    url: "https://l8x1uh5r.autosns.app/cp/ScBMeGwPDE?uid=[[uid]]",
-  },
-  money: {
-    preline: "迷いを減らして、お金の選択を整えるなら👇",
-    label: "💰 お金の整えガイド（通話30分）",
-    url: "https://l8x1uh5r.autosns.app/cp/mKNWGHprcf?uid=[[uid]]",
-  },
-  health: {
-    preline: "不調を長引かせず、整える方向を掴むなら👇",
-    label: "🌿 体調の整えガイド（通話30分）",
-    url: "https://l8x1uh5r.autosns.app/cp/cL4HNsVwGt?uid=[[uid]]",
-  },
-};
+function httpPostForm(urlStr, formObj) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(urlStr);
+    const body = new URLSearchParams();
+    Object.entries(formObj).forEach(([k, v]) => body.append(k, safeStr(v)));
 
-function getCtaByTheme(theme, uid) {
-  const cta = THEME_CTA[theme];
-  if (!cta) return null;
-  return { ...cta, url: cta.url.replace("[[uid]]", uid) };
-}
-
-// --------------------
-// build texts
-// --------------------
-function buildTextShort(cardId, card) {
-  const short = card?.line?.short;
-  if (short) return String(short);
-
-  const title = card?.title || cardId;
-  const focus = card?.focus ? `意識：${String(card.focus)}` : "";
-  const action = card?.action ? `一手：${String(card.action)}` : "";
-
-  return [`【${title}】`, focus, action].filter(Boolean).join("\n");
-}
-
-function buildTextLong(cardId, card, cta) {
-  const long = card?.line?.long;
-  let base;
-
-  if (long) {
-    base = String(long);
-  } else {
-    const title = card?.title ? `【カード】${card.title}` : `【カード】${cardId}`;
-    const msg = card?.message ? String(card.message) : "";
-    const focus = card?.focus ? `【意識すること】\n${String(card.focus)}` : "";
-    const action = card?.action ? `【今日の一手】\n${String(card.action)}` : "";
-
-    base = [
-      "🌿 今日の整えワンポイント",
-      "",
-      title,
-      msg,
-      "",
-      focus,
-      "",
-      action,
-      "",
-      "今日はここまででOKです🌙",
-    ]
-      .filter(Boolean)
-      .join("\n");
-  }
-
-  const ctaBlock = cta?.url
-    ? `\n\n———\n${cta.preline}\n${cta.label}\n${cta.url}`
-    : "";
-
-  return base + ctaBlock;
-}
-
-function clampText(s, max) {
-  const str = String(s || "");
-  if (!max || str.length <= max) return str;
-  return str.slice(0, max - 20) + "\n…（続きは短く調整しました）";
-}
-
-async function readBody(req) {
-  if (req.body && typeof req.body === "object") return req.body;
-  if (typeof req.body === "string") return qs.parse(req.body);
-
-  const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
-  const raw = Buffer.concat(chunks).toString("utf8");
-  return qs.parse(raw);
-}
-
-// --------------------
-// ProLineへ書き戻し
-// --------------------
-async function writeBackToProLine(uid, payloadObj) {
-  const formId = process.env.PROLINE_FORM12_ID;
-  if (!formId) throw new Error("Missing env PROLINE_FORM12_ID");
-
-  const fmBase = (process.env.PROLINE_FM_BASE || "https://l8x1uh5r.autosns.app/fm").replace(/\/$/, "");
-  const url = `${fmBase}/${formId}`;
-
-  const params = new URLSearchParams({ uid });
-  for (const [k, v] of Object.entries(payloadObj)) {
-    if (v == null) continue;
-    params.set(k, String(v));
-  }
-
-  console.log("[tarot-love] writeBack POST:", url);
-  console.log("[tarot-love] writeBack keys:", Object.keys(payloadObj));
-
-  const r = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: params.toString(),
+    const req = https.request(
+      {
+        method: "POST",
+        hostname: u.hostname,
+        path: u.pathname + (u.search || ""),
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => resolve({ status: res.statusCode, data }));
+      }
+    );
+    req.on("error", reject);
+    req.write(body.toString());
+    req.end();
   });
-
-  const text = await r.text().catch(() => "");
-  return { status: r.status, url, rawSnippet: text.slice(0, 220) };
 }
 
-// --------------------
-// handler
-// --------------------
+function buildTexts({ cardId, theme, commonJson, themeJson }) {
+  const cardName = commonJson?.card_name || commonJson?.name || cardId;
+  const oneLine  = commonJson?.one_line || commonJson?.short || "";
+  const meaning  = commonJson?.meaning || commonJson?.desc || "";
+  const points   = commonJson?.points || commonJson?.tips || commonJson?.bullets || [];
+
+  const themeLine = (themeJson && themeJson[cardId]) ? themeJson[cardId] : "";
+
+  // 短文：カード名＋一言（テーマ文は長文側へ寄せる）
+  const shortText = `今日は「${cardName}」の整え。小さくでOKです🌿`;
+
+  // 長文：テーマ文（あれば）→カード解説→意識すること→今日の一手
+  let long = "";
+  long += `【カード】${cardName}\n`;
+  if (meaning) long += `${meaning}\n\n`;
+  if (themeLine) long += `【${themeLabel(theme)}】\n${themeLine}\n\n`;
+
+  if (Array.isArray(points) && points.length) {
+    long += `【意識すること】\n`;
+    points.slice(0, 10).forEach((p) => {
+      const line = safeStr(p).trim();
+      if (line) long += `・${line}\n`;
+    });
+    long += `\n`;
+  }
+
+  // 追加：一言締め（任意）
+  long += `🌙 焦らなくて大丈夫。整えた分だけ、現実がついてきます。`;
+
+  return { shortText, longText: long.trim() };
+}
+
+function themeLabel(theme){
+  switch(theme){
+    case "love": return "恋愛";
+    case "work": return "仕事";
+    case "money": return "金運";
+    case "health": return "健康";
+    default: return "テーマ";
+  }
+}
+
+function splitLongForFree(longText) {
+  // ProLine側で free1 が ~300文字前後で切れている挙動があるので、
+  // free1=280文字程度 / free5=残り に分割（cp21で結合表示）
+  const s = safeStr(longText);
+  const LIMIT = 280;
+  if (s.length <= LIMIT) return { free1: s, free5: "" };
+  return { free1: s.slice(0, LIMIT), free5: s.slice(LIMIT) };
+}
+
 module.exports = async (req, res) => {
   try {
-    if (req.method === "GET") {
-      const uid = String(req.query?.uid || "test");
-      const pasted = String(req.query?.pasted || "");
-      const theme = detectTheme({ theme: String(req.query?.theme || "") }, pasted, req.query);
+    // Vercel: req.method, req.body が来る想定
+    const body = req.body || {};
+    const uid = safeStr(body.uid || body["[[uid]]"] || "").trim();
 
-      const cardId = pickCardId(pasted);
-      const { card: common, from: commonFrom } = loadCommonCard(cardId);
-      const { addon, from: themeFrom } = loadThemeAddon(theme, cardId);
-      const card = mergeCard(common, addon);
-
-      return res.status(200).json({
-        ok: true,
-        uid,
-        theme,
-        cardId,
-        found: !!card,
-        commonFrom,
-        themeFrom,
-        shortPreview: card ? buildTextShort(cardId, card) : "",
-        longPreview: card ? buildTextLong(cardId, card, getCtaByTheme(theme, uid)).slice(0, 200) : "",
-      });
-    }
-
-    // POST（ProLine）
-    const body = await readBody(req);
-
-    const uid = String(body?.uid || req.query?.uid || "");
+    // pasted（カード貼り付け本文）
     const pasted =
-      String(body?.["form_data[form11-1]"] || "") ||
-      String(body?.["form_data[form12-1]"] || "") ||
-      String(body?.["form11-1"] || "") ||
-      String(body?.["form12-1"] || "") ||
-      String(body?.["txt[zeRq0T9Qo1]"] || "") ||
-      String(body?.pasted || "");
+      body.pasted ||
+      body.text ||
+      body["form_data[pasted]"] ||
+      body["form_data[text]"] ||
+      body["form_data[message]"] ||
+      "";
 
-    const theme = detectTheme(body, pasted, req.query);
-    const cardId = pickCardId(pasted);
+    const cardId =
+      safeStr(body.cardId).trim() ||
+      safeStr(body.card_id).trim() ||
+      extractCardIdFromPasted(pasted);
+
+    // theme の拾い順（超重要）
+    const theme =
+      normalizeTheme(body.free4) ||
+      normalizeTheme(body.theme) ||
+      normalizeTheme(body["form_data[theme]"]) ||
+      normalizeTheme(body["form_data[sel[theme]]"]) ||
+      normalizeTheme(body["sel[theme]"]) ||
+      extractThemeFromPasted(pasted) ||
+      "love";
 
     console.log("[tarot-love] uid:", uid);
     console.log("[tarot-love] theme:", theme);
-    console.log("[tarot-love] pasted head:", String(pasted || "").slice(0, 80));
+    console.log("[tarot-love] pasted head:", safeStr(pasted).slice(0, 60));
     console.log("[tarot-love] cardId:", cardId);
 
-    if (!uid) return res.status(200).json({ ok: true, skipped: true, reason: "uid missing" });
-
     if (!cardId) {
-      const short =
-        "🙏 うまく読み取れませんでした。\n" +
-        "貼り付け文の中に「card_id:xxxx」が入っているか確認してください。";
-      const long =
-        short +
-        "\n\n（例）\ncard_id:major_09\ncard_id:swords_07\n\nそのままコピーして貼るのが確実です🌿";
-
-      const writeBack = await writeBackToProLine(uid, {
-        // 新・統一先
-        free6: short,
-        free5: long,
-        // 互換
-        free2: short,
-        free1: long,
-        // デバッグ
-        free3: "",
-        free4: theme,
-      });
-
-      return res.status(200).json({ ok: true, uid, fallback: true, writeBack });
+      res.status(400).send("Missing cardId");
+      return;
     }
 
-    const { card: common, from: commonFrom } = loadCommonCard(cardId);
-    const { addon, from: themeFrom } = loadThemeAddon(theme, cardId);
-    const card = mergeCard(common, addon);
-
+    // カード共通JSON
+    const { commonFrom } = cardToPaths(cardId);
+    const commonJson = readJson(commonFrom);
     console.log("[tarot-love] commonFrom:", commonFrom);
+
+    // テーマJSON
+    const themeFrom = `/var/task/cards/theme/${theme}.json`;
+    const themeJson = readJson(themeFrom);
     console.log("[tarot-love] themeFrom:", themeFrom);
-    console.log("[tarot-love] addon:", addon ? "yes" : "no");
 
-    if (!card) {
-      const short =
-        "🙏 カード情報が見つかりませんでした。\n" +
-        "もう一度「今日のワンカード」で引き直して、表示された文章をそのまま貼り付けてください🌿";
-      const long =
-        short +
-        "\n\n（原因例）\n・途中で文章が欠けた\n・card_idの行が消えた\n・余計な改行が入った";
+    // テキスト生成
+    const { shortText, longText } = buildTexts({ cardId, theme, commonJson, themeJson });
 
-      const writeBack = await writeBackToProLine(uid, {
-        free6: short,
-        free5: long,
-        free2: short,
-        free1: long,
-        free3: cardId,
-        free4: theme,
-      });
+    // freeへ保存（短文=free2、長文=free1、溢れ=free5）
+    const { free1, free5 } = splitLongForFree(longText);
 
-      return res.status(200).json({ ok: true, uid, theme, cardId, found: false, writeBack });
-    }
+    console.log("[tarot-love] addon: yes");
+    console.log("[tarot-love] len free2(short):", safeStr(shortText).length);
+    console.log("[tarot-love] len free1(long):", safeStr(free1).length);
+    console.log("[tarot-love] len free5(over):", safeStr(free5).length);
 
-    // ✅ 出力生成
-    const cta = getCtaByTheme(theme, uid);
-    const shortText = buildTextShort(cardId, card);
-    const longTextRaw = buildTextLong(cardId, card, cta);
+    // writeBack（あなたのログに出ている宛先）
+    const WRITEBACK_URL = "https://l8x1uh5r.autosns.app/fm/xBi34LzVvN";
+    console.log("[tarot-love] writeBack POST:", WRITEBACK_URL);
 
-    // ✅ 念のため長文を安全にクランプ（上限は仮）
-    const longText = clampText(longTextRaw, 4000);
+    // ここは ProLine側のフィールドキーに合わせる（free1/free2/free3/free4/free5）
+    // ※あなたのログに "writeBack keys: ['free2','free1','free3','free4',...]" が出ているのでOK
+    const payload = {
+      uid: uid,
+      free2: shortText,     // 短文
+      free1: free1,         // 長文（先頭）
+      free5: free5,         // 長文の続き（あれば）
+      free3: cardId,        // デバッグ: cardId保持
+      free4: theme          // デバッグ: theme保持（次回も確認できる）
+    };
 
-    console.log("[tarot-love] len free6(short):", shortText.length);
-    console.log("[tarot-love] len free5(long):", longText.length);
+    const r = await httpPostForm(WRITEBACK_URL, payload);
+    console.log("[tarot-love] writeBack status:", r.status);
 
-    // ✅ 保存（freeに統一：free6/5 を本命、free2/1 は互換）
-    const writeBack = await writeBackToProLine(uid, {
-      free6: shortText,
-      free5: longText,
-      free2: shortText,
-      free1: longText,
-      free3: cardId,
-      free4: theme,
-    });
-
-    return res.status(200).json({
-      ok: true,
-      uid,
-      theme,
-      cardId,
-      found: true,
-      commonFrom,
-      themeFrom,
-      shortPreview: shortText,
-      longPreview: longText,
-      writeBack,
-    });
+    res.status(200).json({ ok: true, theme, cardId, writeBackStatus: r.status });
   } catch (e) {
-    console.error("[tarot-love] ERROR:", e);
-    return res.status(200).json({ ok: false, error: String(e?.message || e) });
+    console.log("[tarot-love] ERROR:", e && e.stack ? e.stack : e);
+    res.status(500).send("Internal Error");
   }
 };
