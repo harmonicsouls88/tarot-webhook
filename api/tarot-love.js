@@ -311,27 +311,31 @@ module.exports = async (req, res) => {
       longBase = lines.join("\n").trim();
     }
 
-    // ✅テーマ addon（構造違いも吸収）
-    const idsTried = altCardIds(cardId);
-    const themeAddon = getThemeAddon(themeJson, cardId);
+   // ✅ テーマ addon（構造違いを吸収）
+const idsTried = altCardIds(cardId);
+const themeAddon = getThemeAddon(themeJson, cardId);
 
-    log(`[tarot-love] theme keys tried: ${idsTried.join(",")}`);
-    log(`[tarot-love] themeAddon len: ${themeAddon.length}`);
+// --- デバッグログ（必要十分） ---
+log(`[tarot-love] theme keys tried: ${idsTried.join(",")}`);
+log(`[tarot-love] themeAddon len: ${themeAddon.length}`);
 
-    // ✅ここが“原因確定”ログ：themeAddon が空なら money.json の実キーを一部表示
-    if (!themeAddon && themeJson && !themeJson.__error && typeof themeJson === "object") {
-      const sample = Object.keys(themeJson).slice(0, 40);
-      log(`[tarot-love] themeJson keys sample: ${sample.join(",")}`);
-      if (themeJson.cards && typeof themeJson.cards === "object") {
-        const sample2 = Object.keys(themeJson.cards).slice(0, 40);
-        log(`[tarot-love] themeJson.cards keys sample: ${sample2.join(",")}`);
-      }
-    }
+// addon が空のときだけ、中身の構造を確認
+if (!themeAddon && themeJson && !themeJson.__error && typeof themeJson === "object") {
+  const keys = Object.keys(themeJson);
+  log(`[tarot-love] themeJson keys sample: ${keys.slice(0, 20).join(",")}`);
 
-    let longText = longBase;
-    if (themeAddon) {
-      longText = `${longBase}\n\n【${themeLabel(theme)}の視点】\n${themeAddon}`.trim();
-    }
+  if (themeJson.cards && typeof themeJson.cards === "object") {
+    const cardKeys = Object.keys(themeJson.cards);
+    log(`[tarot-love] themeJson.cards keys sample: ${cardKeys.slice(0, 20).join(",")}`);
+  }
+}
+
+// --- 本文合成 ---
+let longText = longBase;
+if (themeAddon) {
+  longText = `${longBase}\n\n【${themeLabel(theme)}の視点】\n${themeAddon}`.trim();
+}
+    
 
     // ✅最後の1行（売り込み感なし）
     longText = `${longText}\n\n🌿 もっと整えたい時は、LINEに戻って「整え直し」を選べます`.trim();
