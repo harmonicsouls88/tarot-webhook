@@ -85,7 +85,7 @@ function readJson(filePath) {
 }
 
 function splitForFreeFields(longText) {
-  const LIMIT = 180;
+  const LIMIT = 160;
   const s = normalizeSpaces(longText);
   if (!s) return { p1: "", p2: "", p3: "", p4: "" };
 
