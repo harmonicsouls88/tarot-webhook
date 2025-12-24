@@ -166,22 +166,38 @@ function altCardIds(cardId) {
 function getThemeAddon(themeJson, cardId) {
   if (!themeJson || themeJson.__error) return "";
 
-  // ✅ 1) まず「cards: { cups_06: "...", ... }」形式を探す
-  if (themeJson.cards && typeof themeJson.cards === "object") {
-    const ids = altCardIds(cardId);
-    const hit = ids.map(k => safeStr(themeJson.cards[k]).trim()).find(Boolean);
-    if (hit) return hit;
+  const ids = altCardIds(cardId);
+
+  // 1) cards: { cups_06: "..."} 形式
+  if (themeJson.cards && typeof themeJson.cards === "object" && !Array.isArray(themeJson.cards)) {
+    for (const k of ids) {
+      const v = themeJson.cards[k];
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
   }
 
-  // ✅ 2) 次に「直下が辞書」形式（{ cups_06:"...", ... }）
-  if (typeof themeJson === "object") {
-    const ids = altCardIds(cardId);
-    const hit = ids.map(k => safeStr(themeJson[k]).trim()).find(Boolean);
-    if (hit) return hit;
+  // 2) 直下が辞書 { cups_06: "..."} 形式
+  for (const k of ids) {
+    const v = themeJson[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
   }
 
-  // ✅ 3) 最後に「append（テーマ共通の追記）」があればそれを返す
-  //    （いまの money.json の構造に合ってる可能性が高い）
+  // 3) cards が配列形式 [{id:"cups_06", text:"..."}] など
+  if (Array.isArray(themeJson.cards)) {
+    for (const k of ids) {
+      const hit = themeJson.cards.find(x => x && (x.id === k || x.cardId === k));
+      if (hit) {
+        const txt =
+          (typeof hit.text === "string" && hit.text.trim()) ? hit.text.trim()
+          : (typeof hit.message === "string" && hit.message.trim()) ? hit.message.trim()
+          : (typeof hit.addon === "string" && hit.addon.trim()) ? hit.addon.trim()
+          : "";
+        if (txt) return txt;
+      }
+    }
+  }
+
+  // 4) ★今回の本命：append（テーマ共通の追記文）
   if (typeof themeJson.append === "string" && themeJson.append.trim()) {
     return themeJson.append.trim();
   }
@@ -395,23 +411,24 @@ module.exports = async (req, res) => {
     }
 
 // ✅テーマ addon（構造違いも吸収）
+// ✅テーマ addon（構造違いも吸収）
 const idsTried = altCardIds(cardId);
 const themeAddon = getThemeAddon(themeJson, cardId);
 
 log(`[tarot-love] theme keys tried: ${idsTried.join(",")}`);
 log(`[tarot-love] themeAddon len: ${themeAddon.length}`);
 
-// ✅原因確定ログ：themeAddon が空なら money.json の中身構造を出す
+// 原因切り分けログ（themeAddon が空なら構造を見る）
 if (!themeAddon && themeJson && !themeJson.__error && typeof themeJson === "object") {
-  const sample = Object.keys(themeJson).slice(0, 40);
-  log(`[tarot-love] themeJson keys sample: ${sample.join(",")}`);
-  if (themeJson.cards && typeof themeJson.cards === "object") {
-    const sample2 = Object.keys(themeJson.cards).slice(0, 40);
-    log(`[tarot-love] themeJson.cards keys sample: ${sample2.join(",")}`);
+  log(`[tarot-love] themeJson keys sample: ${Object.keys(themeJson).slice(0, 40).join(",")}`);
+  if (themeJson.cards && typeof themeJson.cards === "object" && !Array.isArray(themeJson.cards)) {
+    log(`[tarot-love] themeJson.cards keys sample: ${Object.keys(themeJson.cards).slice(0, 40).join(",")}`);
   }
-  if (typeof themeJson.append === "string") {
-    log(`[tarot-love] themeJson.append len: ${themeJson.append.length}`);
+  if (Array.isArray(themeJson.cards)) {
+    const sampleIds = themeJson.cards.slice(0, 20).map(x => x && (x.id || x.cardId)).filter(Boolean);
+    log(`[tarot-love] themeJson.cards[] sample ids: ${sampleIds.join(",")}`);
   }
+  log(`[tarot-love] themeJson.append len: ${(themeJson.append || "").toString().length}`);
 }
 
 let longText = longBase;
