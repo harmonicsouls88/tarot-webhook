@@ -260,6 +260,9 @@ module.exports = async (req, res) => {
       ? (ids.map(k => safeStr(themeJson[k]).trim()).find(Boolean) || "")
       : "";
 
+    log(`[tarot-love] theme keys tried: ${ids.join(",")}`);
+log(`[tarot-love] themeAddon len: ${themeAddon.length}`);
+    
     let longText = longBase;
     if (themeAddon) {
       longText = `${longBase}\n\n【${themeLabel(theme)}の視点】\n${themeAddon}`.trim();
