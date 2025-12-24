@@ -242,15 +242,21 @@ module.exports = async (req, res) => {
     log(`[tarot-love] len free4(long4): ${p4.length}`);
 
     // ✅writeBack：分割保存＋毎回上書き（混入防止）
-    const payload = {
-      uid,
-      free6: safe(shortText),
-      free5: safe(p1),
-      free1: safe(p2),
-      free3: safe(p3),
-      free4: safe(p4),
-      free2: ZWSP,
-    };
+    const CLEAR = "__CLR__"; // 明示的クリア用トークン
+
+const payload = {
+  uid,
+
+  // 表示に使うのはこの2つだけ
+  free6: shortText,
+  free5: p1,
+
+  // 🔥 過去混入を完全に断つ
+  free1: CLEAR,
+  free2: CLEAR,
+  free3: CLEAR,
+  free4: CLEAR,
+};
 
     const wb = await postForm(WRITEBACK_URL, payload);
     log(`[tarot-love] writeBack POST: ${WRITEBACK_URL}`);
