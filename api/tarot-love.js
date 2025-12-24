@@ -317,6 +317,7 @@ const wb = await postForm(WRITEBACK_URL, payload);
 log(`[tarot-love] writeBack POST: ${WRITEBACK_URL}`);
 log(`[tarot-love] writeBack status: ${wb.status}`);
 
+  
     res.statusCode = 200;
     res.setHeader("content-type", "application/json; charset=utf-8");
     res.end(
