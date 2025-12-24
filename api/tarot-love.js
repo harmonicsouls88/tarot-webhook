@@ -225,8 +225,10 @@ module.exports = async (req, res) => {
       longBase = lines.join("\n").trim();
     }
 
-    const themeAddon =
-      (themeJson && !themeJson.__error && themeJson[cardId]) ? safeStr(themeJson[cardId]).trim() : "";
+    const ids = altCardIds(cardId);
+const themeAddon = (themeJson && !themeJson.__error)
+  ? (ids.map(k => safeStr(themeJson[k]).trim()).find(Boolean) || "")
+  : "";
 
     let longText = longBase;
     if (themeAddon) {
