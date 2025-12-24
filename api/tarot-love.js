@@ -292,28 +292,24 @@ module.exports = async (req, res) => {
     log(`[tarot-love] len free4(long4): ${p4.length}`);
 
     // ====== writeBack（form12） ======
-    // あなたのログで writeBack 先はこれ：
-   // ====== writeBack（form12） ======
 const WRITEBACK_URL = "https://l8x1uh5r.autosns.app/fm/xBi34LzVvN";
 
-const ZWSP = "\u200B";
-const safe = (s) => {
-  s = (s ?? "").toString();
-  return s.length ? s : ZWSP; // 空はZWSPで必ず上書き
-};
-
+// 長文は分割して保存（切れ対策）
+// “使ってない欄”も毎回ZWSPで上書き（過去混入根絶）
 const payload = {
   uid,
 
-  // 結果（短文/長文）
-  free6: safe(shortText), // 短文
-  free5: safe(p1),        // 長文（メイン）
+  // 短文
+  free6: safe(shortText),
 
-  // ★ここが超重要：使わなくても毎回“消す”（過去混入を根絶）
-  free1: ZWSP,
+  // 長文（分割）
+  free5: safe(p1),
+  free1: safe(p2),
+  free3: safe(p3),
+  free4: safe(p4),
+
+  // 予備（使ってなくても毎回上書きして残骸を消す）
   free2: ZWSP,
-  free3: ZWSP,
-  free4: ZWSP,
 };
 
 const wb = await postForm(WRITEBACK_URL, payload);
