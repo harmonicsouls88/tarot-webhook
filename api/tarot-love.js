@@ -53,15 +53,33 @@ function normalizeTheme(raw) {
 
 function extractCardId(pasted) {
   const text = normalizeSpaces(pasted);
+
   const m =
     text.match(/card_id\s*[:=]\s*([a-z0-9_]+)\b/i) ||
     text.match(/cardId\s*[:=]\s*([a-z0-9_]+)\b/i);
+
   if (m && m[1]) return m[1].trim();
 
   const m2 = text.match(/\b(major_\d{2}|cups_\d{2}|wands_\d{2}|swords_\d{2}|pentacles_\d{2})\b/i);
   if (m2 && m2[1]) return m2[1].trim();
 
   return "";
+}
+
+// ★超重要：money.json のキー揺れ（wands_2 / wands_02）を吸収
+function altCardIds(cardId) {
+  const id = (cardId || "").toLowerCase().trim();
+  const m = id.match(/^(major|cups|wands|swords|pentacles)_(\d{1,2})$/);
+  if (!m) return [id];
+
+  const prefix = m[1];
+  const n = m[2];
+
+  const two = String(parseInt(n, 10)).padStart(2, "0");
+  const one = String(parseInt(n, 10));
+
+  // 優先：02 → 2 → 元のid
+  return [`${prefix}_${two}`, `${prefix}_${one}`, id];
 }
 
 function cardPathFor(cardId) {
@@ -84,9 +102,10 @@ function readJson(filePath) {
   }
 }
 
-
 function splitForFreeFields(longText) {
+  // free系が途中で切れる問題があるので安全側（短め）に
   const LIMIT = 160;
+
   const s = normalizeSpaces(longText);
   if (!s) return { p1: "", p2: "", p3: "", p4: "" };
 
@@ -118,7 +137,7 @@ async function readBody(req) {
 }
 
 // ✅二重宣言しない（ここだけ）
-const ZWSP = "\u200b"; // ゼロ幅スペース
+const ZWSP = "\u200b"; // ゼロ幅スペース（見えないが「空じゃない」）
 const safe = (v) => {
   const s = (v == null ? "" : String(v)).trim();
   return s ? s : ZWSP; // 空でも必ず上書きする
@@ -184,7 +203,13 @@ module.exports = async (req, res) => {
     if (!uid || !cardId) {
       res.statusCode = 200;
       res.setHeader("content-type", "application/json; charset=utf-8");
-      res.end(JSON.stringify({ ok: false, message: "missing uid or card_id", uid: uid || "", theme, cardId: cardId || "" }));
+      res.end(JSON.stringify({
+        ok: false,
+        message: "missing uid or card_id",
+        uid: uid || "",
+        theme,
+        cardId: cardId || ""
+      }));
       return;
     }
 
@@ -202,8 +227,11 @@ module.exports = async (req, res) => {
 
     const shortText =
       safeStr(commonLine.short).trim() ||
-      (commonJson && !commonJson.__error ? `今日は「${safeStr(commonJson.title)}」の整え。小さくでOKです🌿` : "");
+      (commonJson && !commonJson.__error
+        ? `今日は「${safeStr(commonJson.title)}」の整え。小さくでOKです🌿`
+        : "");
 
+    // 長文（ベース）
     let longBase = "";
     if (safeStr(commonLine.long).trim()) longBase = safeStr(commonLine.long).trim();
     else if (safeStr(commonLine.full).trim()) longBase = safeStr(commonLine.full).trim();
@@ -226,18 +254,21 @@ module.exports = async (req, res) => {
       longBase = lines.join("\n").trim();
     }
 
+    // テーマ別（キー揺れ吸収）
     const ids = altCardIds(cardId);
-const themeAddon = (themeJson && !themeJson.__error)
-  ? (ids.map(k => safeStr(themeJson[k]).trim()).find(Boolean) || "")
-  : "";
+    const themeAddon = (themeJson && !themeJson.__error)
+      ? (ids.map(k => safeStr(themeJson[k]).trim()).find(Boolean) || "")
+      : "";
 
     let longText = longBase;
     if (themeAddon) {
       longText = `${longBase}\n\n【${themeLabel(theme)}の視点】\n${themeAddon}`.trim();
     }
-    
-longText = `${longText}\n\n🌿 もっと整えたい時は、LINEに戻って「整え直し」を選べます`.trim();
-    
+
+    // 最後に1行だけ（売り込み感なし）
+    longText = `${longText}\n\n🌿 もっと整えたい時は、LINEに戻って「整え直し」を選べます`.trim();
+
+    // 分割
     const { p1, p2, p3, p4 } = splitForFreeFields(longText);
 
     log(`[tarot-love] len free6(short): ${shortText.length}`);
@@ -247,22 +278,19 @@ longText = `${longText}\n\n🌿 もっと整えたい時は、LINEに戻って�
     log(`[tarot-love] len free4(long4): ${p4.length}`);
 
     // ✅writeBack：分割保存＋毎回上書き（混入防止）
-const CLEAR = "__CLR__";
+    const payload = {
+      uid,
 
-// ✅writeBack：分割保存 + 毎回上書き（混入防止）
-const payload = {
-  uid,
+      free6: safe(shortText), // 短文
 
-  free6: safe(shortText), // 短文
+      free5: safe(p1),        // 長文1
+      free1: safe(p2),        // 長文2
+      free3: safe(p3),        // 長文3
+      free4: safe(p4),        // 長文4
 
-  free5: safe(p1),        // 長文1
-  free1: safe(p2),        // 長文2
-  free3: safe(p3),        // 長文3
-  free4: safe(p4),        // 長文4
-
-  // 使ってなくても毎回上書き（過去混入を根絶）
-  free2: ZWSP,
-};
+      // 使ってなくても毎回上書き（過去混入を根絶）
+      free2: ZWSP,
+    };
 
     const wb = await postForm(WRITEBACK_URL, payload);
     log(`[tarot-love] writeBack POST: ${WRITEBACK_URL}`);
