@@ -169,6 +169,50 @@ function altCardIds(cardId) {
   return [`${prefix}_${two}`, `${prefix}_${one}`, id];
 }
 
+function altCardIds(cardId) {
+  const id = (cardId || "").toLowerCase().trim();
+  const m = id.match(/^(major|cups|wands|swords|pentacles)_(\d{1,2})$/);
+  if (!m) return [id];
+
+  const prefix = m[1];
+  const n = parseInt(m[2], 10);
+  const two = String(n).padStart(2, "0");
+  const one = String(n);
+
+  // 重複を除いた順序付き配列
+  return Array.from(new Set([`${prefix}_${two}`, `${prefix}_${one}`, id]));
+}
+
+// ✅ money.json の「構造違い」を全部吸収する
+function getThemeAddon(themeJson, cardId) {
+  if (!themeJson || themeJson.__error) return "";
+
+  // ① append型（今あなたの money.json はこれ）
+  if (typeof themeJson.append === "string" && themeJson.append.trim()) {
+    return themeJson.append.trim();
+  }
+
+  const ids = altCardIds(cardId);
+
+  // ② cards: { cups_06: "...", ... } 型
+  if (themeJson.cards && typeof themeJson.cards === "object") {
+    for (const k of ids) {
+      const v = themeJson.cards[k];
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+  }
+
+  // ③ 直下が { cups_06: "...", ... } 型
+  if (typeof themeJson === "object") {
+    for (const k of ids) {
+      const v = themeJson[k];
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+  }
+
+  return "";
+}
+
 /**
  * themeJson の構造違いも吸収して addon を拾う
  * - 直下に { "cups_06": "..." }
