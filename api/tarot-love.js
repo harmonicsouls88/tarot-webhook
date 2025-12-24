@@ -63,16 +63,11 @@ function extractCardId(pasted) {
   return "";
 }
 
-function cardPathFor(cardId) {
-  // major は common/major, それ以外は common/minor
-  const isMajor = /^major_\d{1,2}$/i.test(cardId);
-  const base = path.join(process.cwd(), "cards", "common", isMajor ? "major" : "minor");
-  return path.join(base, `${cardId}.json`);
-}
-
-function themePathFor(theme) {
-  const base = path.join(process.cwd(), "cards", "theme");
-  return path.join(base, `${theme}.json`);
+// -----------------------
+// JSON 読み込み（候補を試す）
+// -----------------------
+function fileExists(p) {
+  try { return fs.existsSync(p); } catch { return false; }
 }
 
 function readJson(filePath) {
@@ -84,12 +79,97 @@ function readJson(filePath) {
   }
 }
 
+// cardId の揺れ（cups_06 / cups_6 など）を吸収
+function altCardIds(cardId) {
+  const id = safeStr(cardId).toLowerCase().trim();
+  const m = id.match(/^(major|cups|wands|swords|pentacles)_(\d{1,2})$/);
+  if (!m) return [id];
+
+  const prefix = m[1];
+  const n = parseInt(m[2], 10);
+  const two = String(n).padStart(2, "0"); // 06
+  const one = String(n);                 // 6
+
+  // 重複を除いた順序付き
+  return Array.from(new Set([`${prefix}_${two}`, `${prefix}_${one}`, id]));
+}
+
+// cards/common のパス候補（ファイル名の揺れも吸収）
+function cardPathCandidates(cardId) {
+  const ids = altCardIds(cardId);
+
+  // major は common/major, それ以外は common/minor
+  const isMajor = /^major_\d{1,2}$/i.test(cardId);
+  const base = path.join(process.cwd(), "cards", "common", isMajor ? "major" : "minor");
+
+  return ids.map((id) => path.join(base, `${id}.json`));
+}
+
+function themePathFor(theme) {
+  const base = path.join(process.cwd(), "cards", "theme");
+  return path.join(base, `${theme}.json`);
+}
+
+function readFirstJson(paths) {
+  for (const p of paths) {
+    if (fileExists(p)) return readJson(p);
+  }
+  // 見つからない場合：最初のパスでエラー情報を返す
+  return readJson(paths[0] || "");
+}
+
+// -----------------------
+// theme addon（構造違い吸収）
+// money.json が {id,label,append:{...}} でも拾える
+// -----------------------
+function getThemeAddon(themeJson, cardId) {
+  if (!themeJson || themeJson.__error) return "";
+
+  const ids = altCardIds(cardId);
+
+  // ✅ 1) append が「オブジェクト」：カード別コメント（あなたのjsonはこれ）
+  // { id, label, append: { major_00:"...", cups_06:"...", ... } }
+  if (themeJson.append && typeof themeJson.append === "object" && !Array.isArray(themeJson.append)) {
+    const hit = ids.map(k => safeStr(themeJson.append[k]).trim()).find(Boolean);
+    if (hit) return hit;
+  }
+
+  // ✅ 2) cards 型： { cards: { cups_06:"...", ... } }
+  if (themeJson.cards && typeof themeJson.cards === "object" && !Array.isArray(themeJson.cards)) {
+    const hit = ids.map(k => safeStr(themeJson.cards[k]).trim()).find(Boolean);
+    if (hit) return hit;
+  }
+
+  // ✅ 3) 直下辞書： { cups_06:"...", ... }
+  if (typeof themeJson === "object") {
+    const hit = ids.map(k => safeStr(themeJson[k]).trim()).find(Boolean);
+    if (hit) return hit;
+  }
+
+  // ✅ 4) append が「文字列」：テーマ共通の追記（任意で使える）
+  if (typeof themeJson.append === "string" && themeJson.append.trim()) {
+    return themeJson.append.trim();
+  }
+
+  return "";
+}
+
+function themeLabel(theme) {
+  switch (theme) {
+    case "love": return "恋愛";
+    case "work": return "仕事";
+    case "money": return "金運";
+    case "health": return "健康";
+    default: return theme;
+  }
+}
+
 /**
  * ProLine free系が短めで切れがちなので分割
- * 今の実測だと 160 くらいが安全
+ * 160 は「安全」だけど、ぶつ切り感が出やすいので少し上げる
  */
 function splitForFreeFields(longText) {
-  const LIMIT = 160;
+  const LIMIT = 220; // ← 160→220（見た目を改善）
   const s = normalizeSpaces(longText);
   if (!s) return { p1: "", p2: "", p3: "", p4: "" };
 
@@ -148,166 +228,6 @@ async function postForm(url, data) {
   const text = await r.text().catch(() => "");
   return { ok: r.ok, status: r.status, text };
 }
-// cardId の揺れ（cups_06 / cups_6 など）を吸収する
-function altCardIds(cardId) {
-  const id = (cardId || "").toLowerCase().trim();
-  const m = id.match(/^(major|cups|wands|swords|pentacles)_(\d{1,2})$/);
-  if (!m) return [id];
-
-  const prefix = m[1];
-  const n = m[2];
-  const two = String(parseInt(n, 10)).padStart(2, "0"); // 06
-  const one = String(parseInt(n, 10));                  // 6
-  // 例: cups_06, cups_6, (元のまま)
-  return [`${prefix}_${two}`, `${prefix}_${one}`, id];
-}
-
-// money.json の構造違いを吸収して themeAddon を返す
-// theme.json の構造違いを吸収して、カード別コメントを返す
-function getThemeAddon(themeJson, cardId) {
-  if (!themeJson || themeJson.__error) return "";
-
-  const ids = altCardIds(cardId);
-
-  // ✅ 1) あなたの json はここ： { id, label, append: { major_00:"...", ... } }
-  if (themeJson.append && typeof themeJson.append === "object") {
-    const hit = ids.map(k => safeStr(themeJson.append[k]).trim()).find(Boolean);
-    if (hit) return hit;
-  }
-
-  // ✅ 2) 別パターン： { cards: { cups_06:"...", ... } }
-  if (themeJson.cards && typeof themeJson.cards === "object") {
-    const hit = ids.map(k => safeStr(themeJson.cards[k]).trim()).find(Boolean);
-    if (hit) return hit;
-  }
-
-  // ✅ 3) 直下辞書： { cups_06:"...", ... }
-  if (typeof themeJson === "object") {
-    const hit = ids.map(k => safeStr(themeJson[k]).trim()).find(Boolean);
-    if (hit) return hit;
-  }
-
-  return "";
-}
-
-  // 4) ★今回の本命：append（テーマ共通の追記文）
-  if (typeof themeJson.append === "string" && themeJson.append.trim()) {
-    return themeJson.append.trim();
-  }
-
-  return "";
-}
-/**
- * money.json 側のキー揺れ吸収：
- * - wands_02 / wands_2
- * - major_05 / major_5
- * - 大文字/小文字
- */
-function altCardIds(cardId) {
-  const id = safeStr(cardId).toLowerCase().trim();
-  const m = id.match(/^(major|cups|wands|swords|pentacles)_(\d{1,2})$/);
-  if (!m) return [id];
-
-  const prefix = m[1];
-  const n = m[2];
-  const two = String(parseInt(n, 10)).padStart(2, "0"); // 02
-  const one = String(parseInt(n, 10));                  // 2
-
-  // 可能性順に並べる
-  return [`${prefix}_${two}`, `${prefix}_${one}`, id];
-}
-
-function altCardIds(cardId) {
-  const id = (cardId || "").toLowerCase().trim();
-  const m = id.match(/^(major|cups|wands|swords|pentacles)_(\d{1,2})$/);
-  if (!m) return [id];
-
-  const prefix = m[1];
-  const n = parseInt(m[2], 10);
-  const two = String(n).padStart(2, "0");
-  const one = String(n);
-
-  // 重複を除いた順序付き配列
-  return Array.from(new Set([`${prefix}_${two}`, `${prefix}_${one}`, id]));
-}
-
-// ✅ money.json の「構造違い」を全部吸収する
-function getThemeAddon(themeJson, cardId) {
-  if (!themeJson || themeJson.__error) return "";
-
-  // ① append型（今あなたの money.json はこれ）
-  if (typeof themeJson.append === "string" && themeJson.append.trim()) {
-    return themeJson.append.trim();
-  }
-
-  const ids = altCardIds(cardId);
-
-  // ② cards: { cups_06: "...", ... } 型
-  if (themeJson.cards && typeof themeJson.cards === "object") {
-    for (const k of ids) {
-      const v = themeJson.cards[k];
-      if (typeof v === "string" && v.trim()) return v.trim();
-    }
-  }
-
-  // ③ 直下が { cups_06: "...", ... } 型
-  if (typeof themeJson === "object") {
-    for (const k of ids) {
-      const v = themeJson[k];
-      if (typeof v === "string" && v.trim()) return v.trim();
-    }
-  }
-
-  return "";
-}
-
-/**
- * themeJson の構造違いも吸収して addon を拾う
- * - 直下に { "cups_06": "..." }
- * - ネストに { "cards": { "cups_06": "..." } }
- * - ネストに { "minor": {...}, "major": {...} } 等
- */
-function getThemeAddon(themeJson, cardId) {
-  if (!themeJson || themeJson.__error) return "";
-
-  const ids = altCardIds(cardId);
-
-  // 1) 直下
-  for (const k of ids) {
-    const v = safeStr(themeJson[k]).trim();
-    if (v) return v;
-  }
-
-  // 2) cards ネスト
-  if (themeJson.cards && typeof themeJson.cards === "object") {
-    for (const k of ids) {
-      const v = safeStr(themeJson.cards[k]).trim();
-      if (v) return v;
-    }
-  }
-
-  // 3) major/minor ネスト（念のため）
-  for (const bucket of ["major", "minor", "data", "list"]) {
-    if (themeJson[bucket] && typeof themeJson[bucket] === "object") {
-      for (const k of ids) {
-        const v = safeStr(themeJson[bucket][k]).trim();
-        if (v) return v;
-      }
-    }
-  }
-
-  return "";
-}
-
-function themeLabel(theme) {
-  switch (theme) {
-    case "love": return "恋愛";
-    case "work": return "仕事";
-    case "money": return "金運";
-    case "health": return "健康";
-    default: return theme;
-  }
-}
 
 module.exports = async (req, res) => {
   const started = Date.now();
@@ -363,14 +283,14 @@ module.exports = async (req, res) => {
       return;
     }
 
-    // JSON 読込
-    const commonPath = cardPathFor(cardId);
-    const themePath = themePathFor(theme);
+    // JSON 読込（候補を試す）
+    const commonCandidates = cardPathCandidates(cardId);
+    const commonJson = readFirstJson(commonCandidates);
 
-    const commonJson = readJson(commonPath);
+    const themePath = themePathFor(theme);
     const themeJson = readJson(themePath);
 
-    log(`[tarot-love] commonFrom: ${commonPath}`);
+    log(`[tarot-love] commonFrom: ${commonJson.__path || commonCandidates[0]}`);
     log(`[tarot-love] themeFrom: ${themePath}`);
     log(`[tarot-love] addon: ${themeJson && !themeJson.__error ? "yes" : "no"}`);
 
@@ -403,32 +323,29 @@ module.exports = async (req, res) => {
       longBase = lines.join("\n").trim();
     }
 
-// ✅テーマ addon（構造違いも吸収）
-// ✅テーマ addon（構造違いも吸収）
-const idsTried = altCardIds(cardId);
-const themeAddon = getThemeAddon(themeJson, cardId);
+    // ✅テーマ addon（構造違いも吸収）
+    const idsTried = altCardIds(cardId);
+    const themeAddon = getThemeAddon(themeJson, cardId);
 
-log(`[tarot-love] theme keys tried: ${idsTried.join(",")}`);
-log(`[tarot-love] themeAddon len: ${themeAddon.length}`);
+    log(`[tarot-love] theme keys tried: ${idsTried.join(",")}`);
+    log(`[tarot-love] themeAddon len: ${themeAddon.length}`);
 
-// 原因切り分けログ（themeAddon が空なら構造を見る）
-if (!themeAddon && themeJson && !themeJson.__error && typeof themeJson === "object") {
-  log(`[tarot-love] themeJson keys sample: ${Object.keys(themeJson).slice(0, 40).join(",")}`);
-  if (themeJson.cards && typeof themeJson.cards === "object" && !Array.isArray(themeJson.cards)) {
-    log(`[tarot-love] themeJson.cards keys sample: ${Object.keys(themeJson.cards).slice(0, 40).join(",")}`);
-  }
-  if (Array.isArray(themeJson.cards)) {
-    const sampleIds = themeJson.cards.slice(0, 20).map(x => x && (x.id || x.cardId)).filter(Boolean);
-    log(`[tarot-love] themeJson.cards[] sample ids: ${sampleIds.join(",")}`);
-  }
-  log(`[tarot-love] themeJson.append len: ${(themeJson.append || "").toString().length}`);
-}
+    // 切り分けログ（出ないときに構造を見る）
+    if (!themeAddon && themeJson && !themeJson.__error && typeof themeJson === "object") {
+      log(`[tarot-love] themeJson keys sample: ${Object.keys(themeJson).slice(0, 40).join(",")}`);
+      if (themeJson.append && typeof themeJson.append === "object" && !Array.isArray(themeJson.append)) {
+        log(`[tarot-love] themeJson.append keys sample: ${Object.keys(themeJson.append).slice(0, 40).join(",")}`);
+      }
+      if (themeJson.cards && typeof themeJson.cards === "object" && !Array.isArray(themeJson.cards)) {
+        log(`[tarot-love] themeJson.cards keys sample: ${Object.keys(themeJson.cards).slice(0, 40).join(",")}`);
+      }
+      log(`[tarot-love] themeJson.append type: ${typeof themeJson.append}`);
+    }
 
-let longText = longBase;
-if (themeAddon) {
-  longText = `${longBase}\n\n【${themeLabel(theme)}の視点】\n${themeAddon}`.trim();
-}
-    
+    let longText = longBase;
+    if (themeAddon) {
+      longText = `${longBase}\n\n【${themeLabel(theme)}の視点】\n${themeAddon}`.trim();
+    }
 
     // ✅最後の1行（売り込み感なし）
     longText = `${longText}\n\n🌿 もっと整えたい時は、LINEに戻って「整え直し」を選べます`.trim();
