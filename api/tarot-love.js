@@ -85,7 +85,7 @@ function readJson(filePath) {
 }
 
 function splitForFreeFields(longText) {
-  const LIMIT = 230;
+  const LIMIT = 180;
   const s = normalizeSpaces(longText);
   if (!s) return { p1: "", p2: "", p3: "", p4: "" };
 
@@ -242,20 +242,22 @@ module.exports = async (req, res) => {
     log(`[tarot-love] len free4(long4): ${p4.length}`);
 
     // ✅writeBack：分割保存＋毎回上書き（混入防止）
-    const CLEAR = "__CLR__"; // 明示的クリア用トークン
+const CLEAR = "__CLR__";
 
 const payload = {
   uid,
 
-  // 表示に使うのはこの2つだけ
+  // 短文
   free6: shortText,
-  free5: p1,
 
-  // 🔥 過去混入を完全に断つ
-  free1: CLEAR,
+  // 長文を分割して格納
+  free5: p1 || CLEAR,
+  free1: p2 || CLEAR,
+  free3: p3 || CLEAR,
+  free4: p4 || CLEAR,
+
+  // 使ってないのは毎回クリア（過去混入防止）
   free2: CLEAR,
-  free3: CLEAR,
-  free4: CLEAR,
 };
 
     const wb = await postForm(WRITEBACK_URL, payload);
