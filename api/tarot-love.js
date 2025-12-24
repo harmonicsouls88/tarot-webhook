@@ -139,6 +139,12 @@ async function readBody(req) {
   });
 }
 
+const ZWSP = "\u200b"; // ゼロ幅スペース（見えないけど「空じゃない」）
+const safe = (v) => {
+  const s = (v == null ? "" : String(v)).trim();
+  return s ? s : ZWSP;  // 空ならZWSPを入れて「確実に上書き」させる
+};
+
 async function postForm(url, data) {
   // ProLineは「application/x-www-form-urlencoded」が安定
   const params = new URLSearchParams();
@@ -287,28 +293,33 @@ module.exports = async (req, res) => {
 
     // ====== writeBack（form12） ======
     // あなたのログで writeBack 先はこれ：
-    const WRITEBACK_URL = "https://l8x1uh5r.autosns.app/fm/xBi34LzVvN";
+   // ====== writeBack（form12） ======
+const WRITEBACK_URL = "https://l8x1uh5r.autosns.app/fm/xBi34LzVvN";
 
-    const payload = {
-      uid: uid,
+const ZWSP = "\u200b"; // ゼロ幅スペース
+const safe = (v) => {
+  const s = (v == null ? "" : String(v)).trim();
+  return s ? s : ZWSP;
+};
 
-      // cp21は free に統一：短文は free6
-      free6: shortText,
+const payload = {
+  uid,
 
-      // 長文は free5 + free1 + free3 + free4 として分割保存
-      free5: p1,
-      free1: p2,
-      free3: p3,
-      free4: p4,
+  free6: safe(shortText), // 短文
 
-      // 予備：必要ならここも使える
-      // free2: "",
-    };
+  free5: safe(p1),        // 長文1
+  free1: safe(p2),        // 長文2
+  free3: safe(p3),        // 長文3
+  free4: safe(p4),        // 長文4
 
-    const wb = await postForm(WRITEBACK_URL, payload);
+  // 使ってなくても毎回上書き（過去混入を根絶）
+  free2: ZWSP,
+};
 
-    log(`[tarot-love] writeBack POST: ${WRITEBACK_URL}`);
-    log(`[tarot-love] writeBack status: ${wb.status}`);
+const wb = await postForm(WRITEBACK_URL, payload);
+
+log(`[tarot-love] writeBack POST: ${WRITEBACK_URL}`);
+log(`[tarot-love] writeBack status: ${wb.status}`);
 
     res.statusCode = 200;
     res.setHeader("content-type", "application/json; charset=utf-8");
