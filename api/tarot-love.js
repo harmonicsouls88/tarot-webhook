@@ -1,14 +1,12 @@
 // /api/tarot-love.js
 // CommonJS (Vercel Node)
-// 役割：form11(入力) → カード＆テーマを抽出 → cards json を読み込み → form12へ writeBack（freeで出力）
+// 役割：form11(入力) → カード＆テーマ抽出 → cards json 読込 → form12へ writeBack（freeで出力）
 
 const fs = require("fs");
 const path = require("path");
 const querystring = require("querystring");
 
-function log(...args) {
-  console.log(...args);
-}
+function log(...args) { console.log(...args); }
 
 function safeStr(v) {
   if (v === undefined || v === null) return "";
@@ -57,33 +55,17 @@ function extractCardId(pasted) {
   const m =
     text.match(/card_id\s*[:=]\s*([a-z0-9_]+)\b/i) ||
     text.match(/cardId\s*[:=]\s*([a-z0-9_]+)\b/i);
-
   if (m && m[1]) return m[1].trim();
 
-  const m2 = text.match(/\b(major_\d{2}|cups_\d{2}|wands_\d{2}|swords_\d{2}|pentacles_\d{2})\b/i);
+  const m2 = text.match(/\b(major_\d{1,2}|cups_\d{1,2}|wands_\d{1,2}|swords_\d{1,2}|pentacles_\d{1,2})\b/i);
   if (m2 && m2[1]) return m2[1].trim();
 
   return "";
 }
 
-// ★超重要：money.json のキー揺れ（wands_2 / wands_02）を吸収
-function altCardIds(cardId) {
-  const id = (cardId || "").toLowerCase().trim();
-  const m = id.match(/^(major|cups|wands|swords|pentacles)_(\d{1,2})$/);
-  if (!m) return [id];
-
-  const prefix = m[1];
-  const n = m[2];
-
-  const two = String(parseInt(n, 10)).padStart(2, "0");
-  const one = String(parseInt(n, 10));
-
-  // 優先：02 → 2 → 元のid
-  return [`${prefix}_${two}`, `${prefix}_${one}`, id];
-}
-
 function cardPathFor(cardId) {
-  const isMajor = /^major_\d{2}$/i.test(cardId);
+  // major は common/major, それ以外は common/minor
+  const isMajor = /^major_\d{1,2}$/i.test(cardId);
   const base = path.join(process.cwd(), "cards", "common", isMajor ? "major" : "minor");
   return path.join(base, `${cardId}.json`);
 }
@@ -102,10 +84,12 @@ function readJson(filePath) {
   }
 }
 
+/**
+ * ProLine free系が短めで切れがちなので分割
+ * 今の実測だと 160 くらいが安全
+ */
 function splitForFreeFields(longText) {
-  // free系が途中で切れる問題があるので安全側（短め）に
   const LIMIT = 160;
-
   const s = normalizeSpaces(longText);
   if (!s) return { p1: "", p2: "", p3: "", p4: "" };
 
@@ -136,13 +120,19 @@ async function readBody(req) {
   });
 }
 
-// ✅二重宣言しない（ここだけ）
-const ZWSP = "\u200b"; // ゼロ幅スペース（見えないが「空じゃない」）
+// ✅上書き用（空でも必ず上書きする）
+const ZWSP = "\u200b";
 const safe = (v) => {
   const s = (v == null ? "" : String(v)).trim();
-  return s ? s : ZWSP; // 空でも必ず上書きする
+  return s ? s : ZWSP;
 };
 
+// ✅form12 writeBack 先（固定）
+const WRITEBACK_URL = "https://l8x1uh5r.autosns.app/fm/xBi34LzVvN";
+
+/**
+ * ProLine POST（x-www-form-urlencoded）
+ */
 async function postForm(url, data) {
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(data || {})) {
@@ -159,8 +149,73 @@ async function postForm(url, data) {
   return { ok: r.ok, status: r.status, text };
 }
 
-// ✅ここは固定でOK
-const WRITEBACK_URL = "https://l8x1uh5r.autosns.app/fm/xBi34LzVvN";
+/**
+ * money.json 側のキー揺れ吸収：
+ * - wands_02 / wands_2
+ * - major_05 / major_5
+ * - 大文字/小文字
+ */
+function altCardIds(cardId) {
+  const id = safeStr(cardId).toLowerCase().trim();
+  const m = id.match(/^(major|cups|wands|swords|pentacles)_(\d{1,2})$/);
+  if (!m) return [id];
+
+  const prefix = m[1];
+  const n = m[2];
+  const two = String(parseInt(n, 10)).padStart(2, "0"); // 02
+  const one = String(parseInt(n, 10));                  // 2
+
+  // 可能性順に並べる
+  return [`${prefix}_${two}`, `${prefix}_${one}`, id];
+}
+
+/**
+ * themeJson の構造違いも吸収して addon を拾う
+ * - 直下に { "cups_06": "..." }
+ * - ネストに { "cards": { "cups_06": "..." } }
+ * - ネストに { "minor": {...}, "major": {...} } 等
+ */
+function getThemeAddon(themeJson, cardId) {
+  if (!themeJson || themeJson.__error) return "";
+
+  const ids = altCardIds(cardId);
+
+  // 1) 直下
+  for (const k of ids) {
+    const v = safeStr(themeJson[k]).trim();
+    if (v) return v;
+  }
+
+  // 2) cards ネスト
+  if (themeJson.cards && typeof themeJson.cards === "object") {
+    for (const k of ids) {
+      const v = safeStr(themeJson.cards[k]).trim();
+      if (v) return v;
+    }
+  }
+
+  // 3) major/minor ネスト（念のため）
+  for (const bucket of ["major", "minor", "data", "list"]) {
+    if (themeJson[bucket] && typeof themeJson[bucket] === "object") {
+      for (const k of ids) {
+        const v = safeStr(themeJson[bucket][k]).trim();
+        if (v) return v;
+      }
+    }
+  }
+
+  return "";
+}
+
+function themeLabel(theme) {
+  switch (theme) {
+    case "love": return "恋愛";
+    case "work": return "仕事";
+    case "money": return "金運";
+    case "health": return "健康";
+    default: return theme;
+  }
+}
 
 module.exports = async (req, res) => {
   const started = Date.now();
@@ -176,10 +231,12 @@ module.exports = async (req, res) => {
     const rawBody = await readBody(req);
     const body = querystring.parse(rawBody);
 
+    // uid
     const uid =
       pickFirst(body, ["uid", "user_id", "userid"]) ||
       findAnyKeyValue(body, /^form_data\[uid\]$/i);
 
+    // form11-1（カード貼り付け）
     const pasted =
       pickFirst(body, ["form11-1", "form_data[form11-1]"]) ||
       findAnyKeyValue(body, /form11-1/i) ||
@@ -187,6 +244,7 @@ module.exports = async (req, res) => {
 
     const cardId = extractCardId(pasted);
 
+    // form11-5（テーマ）
     const themeRaw =
       pickFirst(body, ["theme", "form11-5", "form_data[form11-5]"]) ||
       findAnyKeyValue(body, /form11-5/i) ||
@@ -213,6 +271,7 @@ module.exports = async (req, res) => {
       return;
     }
 
+    // JSON 読込
     const commonPath = cardPathFor(cardId);
     const themePath = themePathFor(theme);
 
@@ -223,15 +282,13 @@ module.exports = async (req, res) => {
     log(`[tarot-love] themeFrom: ${themePath}`);
     log(`[tarot-love] addon: ${themeJson && !themeJson.__error ? "yes" : "no"}`);
 
+    // 短文/長文生成
     const commonLine = (commonJson && !commonJson.__error && commonJson.line) ? commonJson.line : {};
 
     const shortText =
       safeStr(commonLine.short).trim() ||
-      (commonJson && !commonJson.__error
-        ? `今日は「${safeStr(commonJson.title)}」の整え。小さくでOKです🌿`
-        : "");
+      (commonJson && !commonJson.__error ? `今日は「${safeStr(commonJson.title)}」の整え。小さくでOKです🌿` : "");
 
-    // 長文（ベース）
     let longBase = "";
     if (safeStr(commonLine.long).trim()) longBase = safeStr(commonLine.long).trim();
     else if (safeStr(commonLine.full).trim()) longBase = safeStr(commonLine.full).trim();
@@ -248,30 +305,37 @@ module.exports = async (req, res) => {
         lines.push(``);
       }
       if (safeStr(commonJson.action).trim()) {
-        lines.push(`【今日の一歩】`);
+        lines.push(`【今日の一手】`);
         lines.push(safeStr(commonJson.action).trim());
       }
       longBase = lines.join("\n").trim();
     }
 
-    // テーマ別（キー揺れ吸収）
-    const ids = altCardIds(cardId);
-    const themeAddon = (themeJson && !themeJson.__error)
-      ? (ids.map(k => safeStr(themeJson[k]).trim()).find(Boolean) || "")
-      : "";
+    // ✅テーマ addon（構造違いも吸収）
+    const idsTried = altCardIds(cardId);
+    const themeAddon = getThemeAddon(themeJson, cardId);
 
-    log(`[tarot-love] theme keys tried: ${ids.join(",")}`);
-log(`[tarot-love] themeAddon len: ${themeAddon.length}`);
-    
+    log(`[tarot-love] theme keys tried: ${idsTried.join(",")}`);
+    log(`[tarot-love] themeAddon len: ${themeAddon.length}`);
+
+    // ✅ここが“原因確定”ログ：themeAddon が空なら money.json の実キーを一部表示
+    if (!themeAddon && themeJson && !themeJson.__error && typeof themeJson === "object") {
+      const sample = Object.keys(themeJson).slice(0, 40);
+      log(`[tarot-love] themeJson keys sample: ${sample.join(",")}`);
+      if (themeJson.cards && typeof themeJson.cards === "object") {
+        const sample2 = Object.keys(themeJson.cards).slice(0, 40);
+        log(`[tarot-love] themeJson.cards keys sample: ${sample2.join(",")}`);
+      }
+    }
+
     let longText = longBase;
     if (themeAddon) {
       longText = `${longBase}\n\n【${themeLabel(theme)}の視点】\n${themeAddon}`.trim();
     }
 
-    // 最後に1行だけ（売り込み感なし）
+    // ✅最後の1行（売り込み感なし）
     longText = `${longText}\n\n🌿 もっと整えたい時は、LINEに戻って「整え直し」を選べます`.trim();
 
-    // 分割
     const { p1, p2, p3, p4 } = splitForFreeFields(longText);
 
     log(`[tarot-love] len free6(short): ${shortText.length}`);
@@ -280,18 +344,14 @@ log(`[tarot-love] themeAddon len: ${themeAddon.length}`);
     log(`[tarot-love] len free3(long3): ${p3.length}`);
     log(`[tarot-love] len free4(long4): ${p4.length}`);
 
-    // ✅writeBack：分割保存＋毎回上書き（混入防止）
+    // ✅writeBack（混入防止：free2 は毎回上書き）
     const payload = {
       uid,
-
-      free6: safe(shortText), // 短文
-
-      free5: safe(p1),        // 長文1
-      free1: safe(p2),        // 長文2
-      free3: safe(p3),        // 長文3
-      free4: safe(p4),        // 長文4
-
-      // 使ってなくても毎回上書き（過去混入を根絶）
+      free6: safe(shortText),
+      free5: safe(p1),
+      free1: safe(p2),
+      free3: safe(p3),
+      free4: safe(p4),
       free2: ZWSP,
     };
 
@@ -311,18 +371,9 @@ log(`[tarot-love] themeAddon len: ${themeAddon.length}`);
     }));
   } catch (e) {
     console.error("[tarot-love] ERROR:", e);
+    // ProLine 保護で 200
     res.statusCode = 200;
     res.setHeader("content-type", "application/json; charset=utf-8");
     res.end(JSON.stringify({ ok: false, error: String(e && e.message ? e.message : e) }));
   }
 };
-
-function themeLabel(theme) {
-  switch (theme) {
-    case "love": return "恋愛";
-    case "work": return "仕事";
-    case "money": return "金運";
-    case "health": return "健康";
-    default: return theme;
-  }
-}
