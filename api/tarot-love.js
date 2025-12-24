@@ -83,7 +83,7 @@ function readJson(filePath) {
     return { __error: true, __errorMessage: e && e.message ? e.message : String(e), __path: filePath };
   }
 }
-longText = `${longText}\n\n🌿 もっと整えたい時は、LINEに戻って「整え直し」を選べます`.trim();
+
 
 function splitForFreeFields(longText) {
   const LIMIT = 160;
@@ -235,7 +235,8 @@ const themeAddon = (themeJson && !themeJson.__error)
     if (themeAddon) {
       longText = `${longBase}\n\n【${themeLabel(theme)}の視点】\n${themeAddon}`.trim();
     }
-
+longText = `${longText}\n\n🌿 もっと整えたい時は、LINEに戻って「整え直し」を選べます`.trim();
+    
     const { p1, p2, p3, p4 } = splitForFreeFields(longText);
 
     log(`[tarot-love] len free6(short): ${shortText.length}`);
