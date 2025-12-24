@@ -235,7 +235,7 @@ const themeAddon = (themeJson && !themeJson.__error)
     if (themeAddon) {
       longText = `${longBase}\n\n【${themeLabel(theme)}の視点】\n${themeAddon}`.trim();
     }
-longText = `${longText}\n\n🌿 もっと整えたい時は、LINEに戻って「整え直し」を選べます`.trim();
+
     
     const { p1, p2, p3, p4 } = splitForFreeFields(longText);
 
