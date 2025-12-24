@@ -244,20 +244,19 @@ module.exports = async (req, res) => {
     // ✅writeBack：分割保存＋毎回上書き（混入防止）
 const CLEAR = "__CLR__";
 
+// ✅writeBack：分割保存 + 毎回上書き（混入防止）
 const payload = {
   uid,
 
-  // 短文
-  free6: shortText,
+  free6: safe(shortText), // 短文
 
-  // 長文を分割して格納
-  free5: p1 || CLEAR,
-  free1: p2 || CLEAR,
-  free3: p3 || CLEAR,
-  free4: p4 || CLEAR,
+  free5: safe(p1),        // 長文1
+  free1: safe(p2),        // 長文2
+  free3: safe(p3),        // 長文3
+  free4: safe(p4),        // 長文4
 
-  // 使ってないのは毎回クリア（過去混入防止）
-  free2: CLEAR,
+  // 使ってなくても毎回上書き（過去混入を根絶）
+  free2: ZWSP,
 };
 
     const wb = await postForm(WRITEBACK_URL, payload);
