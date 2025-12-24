@@ -296,24 +296,24 @@ module.exports = async (req, res) => {
    // ====== writeBack（form12） ======
 const WRITEBACK_URL = "https://l8x1uh5r.autosns.app/fm/xBi34LzVvN";
 
-const ZWSP = "\u200b"; // ゼロ幅スペース
-const safe = (v) => {
-  const s = (v == null ? "" : String(v)).trim();
-  return s ? s : ZWSP;
+const ZWSP = "\u200B";
+const safe = (s) => {
+  s = (s ?? "").toString();
+  return s.length ? s : ZWSP; // 空はZWSPで必ず上書き
 };
 
 const payload = {
   uid,
 
+  // 結果（短文/長文）
   free6: safe(shortText), // 短文
+  free5: safe(p1),        // 長文（メイン）
 
-  free5: safe(p1),        // 長文1
-  free1: safe(p2),        // 長文2
-  free3: safe(p3),        // 長文3
-  free4: safe(p4),        // 長文4
-
-  // 使ってなくても毎回上書き（過去混入を根絶）
+  // ★ここが超重要：使わなくても毎回“消す”（過去混入を根絶）
+  free1: ZWSP,
   free2: ZWSP,
+  free3: ZWSP,
+  free4: ZWSP,
 };
 
 const wb = await postForm(WRITEBACK_URL, payload);
