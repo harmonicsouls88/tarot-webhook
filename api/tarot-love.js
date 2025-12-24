@@ -83,6 +83,7 @@ function readJson(filePath) {
     return { __error: true, __errorMessage: e && e.message ? e.message : String(e), __path: filePath };
   }
 }
+longText = `${longText}\n\n🌿 もっと整えたい時は、LINEに戻って「整え直し」を選べます`.trim();
 
 function splitForFreeFields(longText) {
   const LIMIT = 160;
