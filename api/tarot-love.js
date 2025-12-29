@@ -14,8 +14,11 @@ function safeStr(v) {
   try { return String(v); } catch { return ""; }
 }
 
-function normalizeSpaces(s) {
-  return safeStr(s).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+function normalizeNewlines(s) {
+  // もし json 等に「\n」が文字として入ってるケースも吸収
+  return safeStr(s)
+    .replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+    .replace(/\\n/g, "\n"); // ← これ超重要（"\n"が文字で入ってる時）
 }
 
 function pickFirst(obj, keys) {
@@ -180,22 +183,32 @@ function themeLabel(theme) {
  * free枠が短めで切れがちなので分割（安全側に 150）
  * free5 -> free3 -> free4 に流す（free1はテーマ用に空ける）
  */
-function splitFree(text, limit = 150) {
-  const s = normalizeSpaces(text).trim();
+function splitFreeByBytes(text, limitBytes = 420) {
+  const s = normalizeNewlines(text).trim();
   if (!s) return ["", "", ""];
 
-  const out = [];
+  const parts = [];
   let cur = s;
 
-  while (cur.length > limit && out.length < 2) {
-    const cutAt = cur.lastIndexOf("\n", limit);
-    const idx = cutAt > 60 ? cutAt : limit;
-    out.push(cur.slice(0, idx).trim());
-    cur = cur.slice(idx).trim();
-  }
-  out.push(cur.trim());
+  const take = (str) => {
+    // バイト上限まで安全に切り出し（UTF-8で壊れないように）
+    let out = "";
+    for (const ch of str) {
+      const next = out + ch;
+      if (Buffer.byteLength(next, "utf8") > limitBytes) break;
+      out = next;
+    }
+    return out;
+  };
 
-  return [out[0] || "", out[1] || "", out[2] || ""];
+  while (Buffer.byteLength(cur, "utf8") > limitBytes && parts.length < 2) {
+    const head = take(cur);
+    parts.push(head.trim());
+    cur = cur.slice(head.length).trim();
+  }
+  parts.push(cur.trim());
+
+  return [parts[0] || "", parts[1] || "", parts[2] || ""];
 }
 
 module.exports = async (req, res) => {
@@ -308,7 +321,7 @@ module.exports = async (req, res) => {
     // free1 = テーマ追記 + 最後の1行（ここに必ず分離して入れる）
     const cta = `🌿 もっと整えたい時は、LINEに戻って「整え直し」を選べます`;
 
-    const [a, b, c] = splitFree(longBase, 150);
+    const [a, b, c] = splitFreeByBytes(longBase, 420);
 
     let free1 = "";
     if (themeAddon) {
@@ -323,6 +336,11 @@ module.exports = async (req, res) => {
     log(`[tarot-love] len free3(long3): ${b.length}`);
     log(`[tarot-love] len free4(long4): ${c.length}`);
     log(`[tarot-love] len free1(theme+cta): ${free1.length}`);
+
+log(`[tarot-love] bytes free5: ${Buffer.byteLength(a, "utf8")}`);
+log(`[tarot-love] bytes free3: ${Buffer.byteLength(b, "utf8")}`);
+log(`[tarot-love] bytes free4: ${Buffer.byteLength(c, "utf8")}`);
+log(`[tarot-love] bytes free1: ${Buffer.byteLength(free1, "utf8")}`);
 
     const payload = {
       uid,
