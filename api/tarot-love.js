@@ -307,31 +307,46 @@ module.exports = async (req, res) => {
     }
 
     const themeAddon = getThemeAddon(themeJson, cardId);
-    const cta = `🌿 もっと整えたい時は、LINEに戻って「整え直し」を選べます`;
+    const cta = `焦らなくて大丈夫。整えた分だけ、現実がついてきます。`;
+const footer = `🌿 もっと整えたい時は、LINEに戻って「整え直し」を選べます`;
 
-    const free1 = themeAddon
-      ? `【${themeLabel(theme)}の視点】\n${themeAddon}\n\n${cta}`
-      : cta;
+// longBase から、意識/一手を“確実に”分離する
+const src = normalizeSpaces(longBase || "").trim();
 
-    // ✅本文は最大4枠に分割（free5/free3/free4/free2）
-    const [p5, p3, p4, p2] = splitTo4ByBytes(longBase, 330);
+// 【今日の一手】以降を切り出し
+let beforeAction = src;
+let actionBlock = "";
 
-    // ✅ログ（bytesが見える）
-    log(`[tarot-love] bytes free5: ${byteLen(p5)}`);
-    log(`[tarot-love] bytes free3: ${byteLen(p3)}`);
-    log(`[tarot-love] bytes free4: ${byteLen(p4)}`);
-    log(`[tarot-love] bytes free2: ${byteLen(p2)}`);
-    log(`[tarot-love] bytes free1: ${byteLen(free1)}`);
+const idx = src.indexOf("【今日の一手】");
+if (idx >= 0) {
+  beforeAction = src.slice(0, idx).trim();
+  actionBlock = src.slice(idx).trim(); // 見出し含めて丸ごと
+}
 
-    const payload = {
-      uid,
-      free6: safe(shortText),
-      free5: safe(p5),
-      free3: safe(p3),
-      free4: safe(p4),
-      free2: safe(p2),
-      free1: safe(free1),
-    };
+// free5=前半（意識まで）
+const free5 = beforeAction;
+
+// free3=今日の一手（無ければ空）
+const free3 = actionBlock;
+
+// free2=最後の一言（必ず入れる）
+const free2 = cta;
+
+// free1=テーマ + footer
+const themeAddon = getThemeAddon(themeJson, cardId);
+const free1 = themeAddon
+  ? `【${themeLabel(theme)}の視点】\n${themeAddon}\n\n${footer}`.trim()
+  : footer;
+
+const payload = {
+  uid,
+  free6: safe(shortText),
+  free5: safe(free5),
+  free3: safe(free3),
+  free4: ZWSP,         // 未使用でOK（上書きだけする）
+  free2: safe(free2),  // ← ここが必ず入る
+  free1: safe(free1),
+};
 
     const wb = await postForm(WRITEBACK_URL, payload);
     log(`[tarot-love] writeBack status: ${wb.status}`);
