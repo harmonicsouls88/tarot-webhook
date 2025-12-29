@@ -171,7 +171,7 @@ function themeLabel(theme) {
 }
 
 /* ============================
- * ✅ バイト数で安全にカット（UTF-8）
+ * ✅ bytesで切る（ProLineの保存上限がbytes寄りのため）
  * ============================ */
 function byteLen(s) {
   return new TextEncoder().encode(s || "").length;
@@ -179,17 +179,47 @@ function byteLen(s) {
 
 function cutByBytes(s, limitBytes) {
   const text = normalizeSpaces(s || "");
-  const enc = new TextEncoder();
+  if (byteLen(text) <= limitBytes) return text;
 
-  if (byteLen(text) <= limitBytes) return text.trim();
+  // 改行優先
+  const lines = text.split("\n");
+  let out = "";
+  for (const line of lines) {
+    const next = out ? out + "\n" + line : line;
+    if (byteLen(next) > limitBytes) break;
+    out = next;
+  }
+  if (out) return out.trim();
 
+  // 最後の手段：1文字ずつ
   let acc = "";
   for (const ch of text) {
     const next = acc + ch;
-    if (enc.encode(next).length > limitBytes) break;
+    if (byteLen(next) > limitBytes) break;
     acc = next;
   }
   return acc.trim();
+}
+
+// ✅ 4分割（free5/free3/free4/free2）+ free1はテーマ&CTA
+function splitFreeByBytes4(text, limitBytes = 300) {
+  const s = normalizeSpaces(text).trim();
+  if (!s) return ["", "", "", ""];
+
+  let rest = s;
+
+  const a = cutByBytes(rest, limitBytes);
+  rest = rest.slice(a.length).trim();
+
+  const b = cutByBytes(rest, limitBytes);
+  rest = rest.slice(b.length).trim();
+
+  const c = cutByBytes(rest, limitBytes);
+  rest = rest.slice(c.length).trim();
+
+  const d = cutByBytes(rest, limitBytes);
+
+  return [a, b, c, d];
 }
 
 module.exports = async (req, res) => {
@@ -241,81 +271,86 @@ module.exports = async (req, res) => {
       return;
     }
 
-    const commonJson = readJson(cardPathFor(cardId));
-    const themeJson = readJson(themePathFor(theme));
+    const commonPath = cardPathFor(cardId);
+    const themePath = themePathFor(theme);
 
-    const commonLine = (commonJson && !commonJson.__error && commonJson.line) ? commonJson.line : {};
+    const commonJson = readJson(commonPath);
+    const themeJson = readJson(themePath);
+
+    log(`[tarot-love] commonFrom: ${commonPath}`);
+    log(`[tarot-love] themeFrom: ${themePath}`);
+    log(`[tarot-love] addon: ${themeJson && !themeJson.__error ? "yes" : "no"}`);
+
+    const commonLine =
+      (commonJson && !commonJson.__error && commonJson.line) ? commonJson.line : {};
 
     const shortText =
       safeStr(commonLine.short).trim() ||
       (commonJson && !commonJson.__error ? `今日は「${safeStr(commonJson.title)}」の整え。小さくでOKです🌿` : "");
 
-    // ✅ セクション別に“最初から分けて作る”（ここが最重要）
-    let bodyText = "";
-    let actionText = "";
-
+    // ✅ longBase：必ず組み立て式（focus/actionがある限り必ず出る）
+    let longBase = "";
     if (commonJson && !commonJson.__error) {
-      const title = safeStr(commonJson.title).trim();
+      const lines = [];
+      lines.push(`🌿 今日の整えワンポイント（詳細）`);
+      lines.push(``);
+      lines.push(`【カード】 ${safeStr(commonJson.title)}`);
+
       const mainMsg =
         safeStr(commonJson.message).trim() ||
         safeStr(commonLine.long).trim() ||
         safeStr(commonLine.full).trim();
 
-      const focus = safeStr(commonJson.focus).trim();
-      const action = safeStr(commonJson.action).trim();
-
-      const lines = [];
-      lines.push(`🌿 今日の整えワンポイント（詳細）`);
-      lines.push(``);
-      lines.push(`【カード】 ${title}`);
       if (mainMsg) lines.push(mainMsg);
 
-      if (focus) {
-        lines.push(``);
+      lines.push(``);
+      if (safeStr(commonJson.focus).trim()) {
         lines.push(`【意識すること】`);
-        lines.push(focus);
+        lines.push(safeStr(commonJson.focus).trim());
+        lines.push(``);
+      }
+      if (safeStr(commonJson.action).trim()) {
+        lines.push(`【今日の一手】`);
+        lines.push(safeStr(commonJson.action).trim());
       }
 
-      bodyText = lines.join("\n").trim();
-
-      if (action) {
-        actionText = `【今日の一手】\n${action}`.trim(); // ✅見出し込みで固定
-      }
+      longBase = lines.join("\n").trim();
     } else {
-      bodyText = safeStr(commonLine.long).trim() || safeStr(commonLine.full).trim();
-      actionText = "";
+      longBase = safeStr(commonLine.long).trim() || safeStr(commonLine.full).trim();
     }
 
     const themeAddon = getThemeAddon(themeJson, cardId);
     const cta = `🌿 もっと整えたい時は、LINEに戻って「整え直し」を選べます`;
 
-    let themeText = "";
+    // ✅ ProLine上限が320bytes前後っぽいので安全に300bytes
+    const [a, b, c, d] = splitFreeByBytes4(longBase, 300);
+
+    let free1 = "";
     if (themeAddon) {
-      themeText = `【${themeLabel(theme)}の視点】\n${themeAddon}\n\n${cta}`.trim();
+      free1 = `【${themeLabel(theme)}の視点】\n${themeAddon}\n\n${cta}`.trim();
     } else {
-      themeText = cta;
+      free1 = cta;
     }
 
-    // ✅ 各枠に“それぞれ”バイト上限で入れる（分割しない）
-    const LIMIT = 360; // まずは安全値（ログに出てる357付近に合わせてる）
-
-    const free5 = cutByBytes(bodyText, LIMIT);        // 本文＋意識
-    const free3 = cutByBytes(actionText, LIMIT);      // 今日の一手（見出し込み）
-    const free1 = cutByBytes(themeText, LIMIT);       // テーマ＋CTA
-    const free4 = ZWSP;                               // 予備（空で上書き）
-
-    log(`[tarot-love] bytes free5: ${byteLen(free5)}`);
-    log(`[tarot-love] bytes free3: ${byteLen(free3)}`);
+    // ✅bytesログ（free2も出す）
+    log(`[tarot-love] bytes free5: ${byteLen(a)}`);
+    log(`[tarot-love] bytes free3: ${byteLen(b)}`);
+    log(`[tarot-love] bytes free4: ${byteLen(c)}`);
+    log(`[tarot-love] bytes free2: ${byteLen(d)}`);
     log(`[tarot-love] bytes free1: ${byteLen(free1)}`);
 
     const payload = {
       uid,
       free6: safe(shortText),
-      free5: safe(free5),
-      free3: safe(free3),
-      free4: free4,         // ✅必ず上書き
+
+      // 本文（4分割）
+      free5: safe(a),
+      free3: safe(b),
+      free4: safe(c),
+      free2: safe(d),
+
+      // テーマ＋CTA
       free1: safe(free1),
-      free2: ZWSP,           // ✅混入防止
     };
 
     const wb = await postForm(WRITEBACK_URL, payload);
