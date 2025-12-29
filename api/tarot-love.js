@@ -321,50 +321,70 @@ module.exports = async (req, res) => {
         lines.push(``);
       }
 
-      // ✅締めの一言（ここが欠けやすかったので本文側に含める）
-      lines.push(`🌙 焦らなくて大丈夫。整えた分だけ、現実がついてきます。`);
+// ✅締め・CTA
+const closing = "🌙 焦らなくて大丈夫。整えた分だけ、現実がついてきます。";
+const cta = "🌿 もっと整えたい時は、LINEに戻って「整え直し」を選べます";
 
-      longBase = lines.join("\n").trim();
-    } else {
-      longBase = safeStr(commonLine.long).trim() || safeStr(commonLine.full).trim();
-    }
+// ✅テーマ addon（ここはそのままでOK）
+const idsTried = altCardIds(cardId);
+const themeAddon = getThemeAddon(themeJson, cardId);
 
-    // ✅テーマ addon
-    const idsTried = altCardIds(cardId);
-    const themeAddon = getThemeAddon(themeJson, cardId);
+log(`[tarot-love] theme keys tried: ${idsTried.join(",")}`);
+log(`[tarot-love] themeAddon len: ${themeAddon.length}`);
 
-    log(`[tarot-love] theme keys tried: ${idsTried.join(",")}`);
-    log(`[tarot-love] themeAddon len: ${themeAddon.length}`);
+// ✅free5：ヘッダ＋カード＋本文（mainMsgまで）
+const p5 = cutByBytes(
+  [
+    "🌿 今日の整えワンポイント（詳細）",
+    "",
+    `【カード】 ${safeStr(commonJson.title)}`,
+    mainMsg ? mainMsg : ""
+  ].filter(Boolean).join("\n").trim(),
+  340
+);
 
-    // ✅ CTA（テーマがあれば後ろに出す）
-    const cta = `🌿 もっと整えたい時は、LINEに戻って「整え直し」を選べます`;
+// ✅free4：意識すること（focus）
+const p4 = cutByBytes(
+  safeStr(commonJson.focus).trim()
+    ? ["【意識すること】", safeStr(commonJson.focus).trim()].join("\n")
+    : "",
+  340
+);
 
-    // ✅ 本文を free5→free4→free3→free2 に4分割（欠けない）
-    const [p5, p4, p3, p2] = splitByBytes4(longBase, 340);
+// ✅free3：今日の一手（action）＋締め（欠け防止でここに入れる）
+const p3 = cutByBytes(
+  safeStr(commonJson.action).trim()
+    ? ["【今日の一手】", safeStr(commonJson.action).trim(), "", closing].join("\n")
+    : closing,
+  340
+);
 
-    // ✅ free1：テーマ視点 + CTA（最後に固定）
-    const free1 =
-      themeAddon
-        ? `【${themeLabel(theme)}の視点】\n${themeAddon}\n\n${cta}`.trim()
-        : cta;
+// ✅free2：テーマ視点（あれば）
+const p2 = cutByBytes(
+  themeAddon ? [`【${themeLabel(theme)}の視点】`, themeAddon].join("\n") : "",
+  340
+);
 
-    // ✅ログ（chars/bytes）
-    log(`[tarot-love] free6 chars/bytes: ${shortText.length}/${byteLen(shortText)}`);
-    log(`[tarot-love] free5 chars/bytes: ${p5.length}/${byteLen(p5)}`);
-    log(`[tarot-love] free4 chars/bytes: ${p4.length}/${byteLen(p4)}`);
-    log(`[tarot-love] free3 chars/bytes: ${p3.length}/${byteLen(p3)}`);
-    log(`[tarot-love] free2 chars/bytes: ${p2.length}/${byteLen(p2)}`);
-    log(`[tarot-love] free1 chars/bytes: ${free1.length}/${byteLen(free1)}`);
+// ✅free1：CTA固定（短いので切らない）
+const free1 = cta;
 
-    const payload = {
-      uid,
-      free6: safe(shortText),
-      free5: safe(p5),
-      free4: safe(p4),
-      free3: safe(p3),
-      free2: safe(p2),
-      free1: safe(free1),
-    };
+// ✅ログ（chars/bytes）
+log(`[tarot-love] free6 chars/bytes: ${shortText.length}/${byteLen(shortText)}`);
+log(`[tarot-love] free5 chars/bytes: ${p5.length}/${byteLen(p5)}`);
+log(`[tarot-love] free4 chars/bytes: ${p4.length}/${byteLen(p4)}`);
+log(`[tarot-love] free3 chars/bytes: ${p3.length}/${byteLen(p3)}`);
+log(`[tarot-love] free2 chars/bytes: ${p2.length}/${byteLen(p2)}`);
+log(`[tarot-love] free1 chars/bytes: ${free1.length}/${byteLen(free1)}`);
+
+const payload = {
+  uid,
+  free6: safe(shortText),
+  free5: safe(p5),
+  free4: safe(p4),
+  free3: safe(p3),
+  free2: safe(p2),
+  free1: safe(free1),
+};
 
     const wb = await postForm(WRITEBACK_URL, payload);
     log(`[tarot-love] writeBack POST: ${WRITEBACK_URL}`);
