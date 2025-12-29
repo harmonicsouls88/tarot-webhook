@@ -15,7 +15,7 @@ function safeStr(v) {
 }
 
 function normalizeSpaces(s) {
-  // ✅ここが消えると normalizeSpaces not defined になるので残す
+  // ✅ ここが消えると normalizeSpaces not defined になるので残す
   return safeStr(s).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 }
 
@@ -87,9 +87,8 @@ function readJson(filePath) {
 // ✅上書き用（空でも必ず上書きする）
 const ZWSP = "\u200b";
 const safe = (v) => {
-  const s = (v == null ? "" : String(v));
-  // 空はZWSP（上書き＆過去混入防止）
-  return s.trim() ? s : ZWSP;
+  const s = (v == null ? "" : String(v)).trim();
+  return s ? s : ZWSP;
 };
 
 // ✅form12 writeBack 先（固定）
@@ -140,6 +139,7 @@ function altCardIds(cardId) {
 
 /**
  * themeJson の構造違いも吸収して addon を拾う
+ * { append: { cups_06:"...", ... } } / { cards:{...} } / 直下辞書 {...}
  */
 function getThemeAddon(themeJson, cardId) {
   if (!themeJson || themeJson.__error) return "";
@@ -173,70 +173,57 @@ function themeLabel(theme) {
 }
 
 /* ============================
- * ✅ bytes計測
+ * ✅ bytesベース分割：trimズレで欠けない版（4分割）
  * ============================ */
 function byteLen(s) {
   return new TextEncoder().encode(s || "").length;
 }
 
-/* ============================
- * ✅【最重要】ズレない分割（trimしない/ slice位置が狂わない）
- * - UTF-16のインデックスで nextPos を返す
- * - なるべく改行で切る（見た目が綺麗）
- * ============================ */
-function takeByBytes(text, startPos, limitBytes) {
+function splitByBytes4(text, limitBytes = 340) {
   const s = normalizeSpaces(text || "");
-  const encoder = new TextEncoder();
+  const enc = new TextEncoder();
 
-  let pos = startPos;      // UTF-16 index
-  let bytes = 0;
-  let lastBreak = -1;      // UTF-16 index（\nの位置）
+  function take(rest) {
+    if (!rest) return { part: "", rest: "" };
 
-  while (pos < s.length) {
-    const code = s.codePointAt(pos);
-    const step = code > 0xffff ? 2 : 1;     // surrogate pair対応
-    const ch = s.slice(pos, pos + step);
-    const b = encoder.encode(ch).length;
+    // ①改行単位で積めるだけ積む
+    const lines = rest.split("\n");
+    let out = "";
+    let usedChars = 0;
 
-    if (bytes + b > limitBytes) break;
-    bytes += b;
-    pos += step;
+    for (let i = 0; i < lines.length; i++) {
+      const candidate = out ? out + "\n" + lines[i] : lines[i];
+      if (enc.encode(candidate).length > limitBytes) break;
+      out = candidate;
 
-    // 「段落」っぽいところで切りたいので、改行を覚える
-    if (ch === "\n") lastBreak = pos;
-  }
-
-  // できれば改行で切る（ただし短すぎる切り方は避ける）
-  let cutPos = pos;
-  const minKeep = Math.min(startPos + 40, pos); // 40文字くらいは保持したい
-  if (lastBreak !== -1 && lastBreak > minKeep) cutPos = lastBreak;
-
-  const chunk = s.slice(startPos, cutPos).replace(/\s+$/g, ""); // ←末尾だけ整える（位置ズレなし）
-  let nextPos = cutPos;
-
-  // 次のパートの先頭が改行や空白だらけにならないよう軽くスキップ
-  while (nextPos < s.length && (s[nextPos] === "\n" || s[nextPos] === " " || s[nextPos] === "\t")) {
-    nextPos++;
-  }
-
-  return { chunk, nextPos };
-}
-
-function splitByBytesStable(text, limitBytes = 330) {
-  const s = normalizeSpaces(text || "");
-  const parts = [];
-  let pos = 0;
-
-  for (let i = 0; i < 3; i++) {
-    if (pos >= s.length) {
-      parts.push("");
-      continue;
+      // 消費した文字数（\n も1文字として数える）
+      usedChars += (i === 0 ? lines[i].length : (1 + lines[i].length));
     }
-    const { chunk, nextPos } = takeByBytes(s, pos, limitBytes);
-    parts.push(chunk);
-    pos = nextPos;
+
+    // ②改行で1行も入らない場合は文字単位で積む
+    if (!out) {
+      let acc = "";
+      let idx = 0;
+      for (const ch of rest) {
+        const next = acc + ch;
+        if (enc.encode(next).length > limitBytes) break;
+        acc = next;
+        idx += ch.length;
+      }
+      out = acc;
+      usedChars = idx;
+    }
+
+    return { part: out, rest: rest.slice(usedChars) };
   }
-  return parts;
+
+  let r = s;
+  const p1 = take(r); r = p1.rest;
+  const p2 = take(r); r = p2.rest;
+  const p3 = take(r); r = p3.rest;
+  const p4 = take(r);
+
+  return [p1.part, p2.part, p3.part, p4.part];
 }
 
 module.exports = async (req, res) => {
@@ -272,9 +259,7 @@ module.exports = async (req, res) => {
     const theme = normalizeTheme(themeRaw) || "love";
 
     log(`[tarot-love] uid: ${uid || ""}`);
-    log(`[tarot-love] themeRaw: ${safeStr(themeRaw)}`);
     log(`[tarot-love] theme: ${theme}`);
-    log(`[tarot-love] pasted head: ${normalizeSpaces(pasted).slice(0, 120).replace(/\n/g, "\\n")}`);
     log(`[tarot-love] cardId: ${cardId}`);
 
     if (!uid || !cardId) {
@@ -307,7 +292,7 @@ module.exports = async (req, res) => {
       safeStr(commonLine.short).trim() ||
       (commonJson && !commonJson.__error ? `今日は「${safeStr(commonJson.title)}」の整え。小さくでOKです🌿` : "");
 
-    // ✅ longBase：組み立て式（ここに「焦らなくて…」も入れる）
+    // ✅ longBase は組み立て式（focus/action がある限り必ず出る）
     let longBase = "";
     if (commonJson && !commonJson.__error) {
       const lines = [];
@@ -322,69 +307,64 @@ module.exports = async (req, res) => {
 
       if (mainMsg) lines.push(mainMsg);
 
-      // 見出しと中身は「必ずセット」で入れる（抜け防止）
-      const focus = safeStr(commonJson.focus).trim();
-      const action = safeStr(commonJson.action).trim();
-
-      if (focus) {
-        lines.push(``);
-        lines.push(`【意識すること】`);
-        lines.push(focus);
-      }
-
-      if (action) {
-        lines.push(``);
-        lines.push(`【今日の一手】`);
-        lines.push(action);
-      }
-
-      // ✅ここに固定アウトロ（free1側に入れない＝重複防止）
       lines.push(``);
-      lines.push(`焦らなくて大丈夫。整えた分だけ、現実がついてきます。`);
 
-      longBase = lines.join("\n");
+      if (safeStr(commonJson.focus).trim()) {
+        lines.push(`【意識すること】`);
+        lines.push(safeStr(commonJson.focus).trim());
+        lines.push(``);
+      }
+
+      if (safeStr(commonJson.action).trim()) {
+        lines.push(`【今日の一手】`);
+        lines.push(safeStr(commonJson.action).trim());
+        lines.push(``);
+      }
+
+      // ✅締めの一言（ここが欠けやすかったので本文側に含める）
+      lines.push(`🌙 焦らなくて大丈夫。整えた分だけ、現実がついてきます。`);
+
+      longBase = lines.join("\n").trim();
     } else {
-      longBase =
-        safeStr(commonLine.long).trim() ||
-        safeStr(commonLine.full).trim();
+      longBase = safeStr(commonLine.long).trim() || safeStr(commonLine.full).trim();
     }
 
+    // ✅テーマ addon
     const idsTried = altCardIds(cardId);
     const themeAddon = getThemeAddon(themeJson, cardId);
 
     log(`[tarot-love] theme keys tried: ${idsTried.join(",")}`);
     log(`[tarot-love] themeAddon len: ${themeAddon.length}`);
 
-    // ✅ テーマ文（free1にだけ置く）
+    // ✅ CTA（テーマがあれば後ろに出す）
     const cta = `🌿 もっと整えたい時は、LINEに戻って「整え直し」を選べます`;
-    const free1 = themeAddon
-      ? `【${themeLabel(theme)}の視点】\n${themeAddon}\n\n${cta}`
-      : cta;
 
-    // ✅ 分割（ズレない版）
-    const [p1, p2, p3] = splitByBytesStable(longBase, 330);
+    // ✅ 本文を free5→free4→free3→free2 に4分割（欠けない）
+    const [p5, p4, p3, p2] = splitByBytes4(longBase, 340);
 
-    // free2は「毎回上書き＆混入防止用のダミー」
-    // ※cp21で結合するなら、free2は “空(=ZWSP)” のままでOK
-    const payload = {
-      uid,
-      free6: safe(shortText),
-
-      free5: safe(p1),
-      free3: safe(p2),
-      free4: safe(p3),
-
-      free2: ZWSP,       // ←いつでも上書きするため
-      free1: safe(free1)
-    };
+    // ✅ free1：テーマ視点 + CTA（最後に固定）
+    const free1 =
+      themeAddon
+        ? `【${themeLabel(theme)}の視点】\n${themeAddon}\n\n${cta}`.trim()
+        : cta;
 
     // ✅ログ（chars/bytes）
     log(`[tarot-love] free6 chars/bytes: ${shortText.length}/${byteLen(shortText)}`);
-    log(`[tarot-love] free5 chars/bytes: ${p1.length}/${byteLen(p1)}`);
-    log(`[tarot-love] free3 chars/bytes: ${p2.length}/${byteLen(p2)}`);
-    log(`[tarot-love] free4 chars/bytes: ${p3.length}/${byteLen(p3)}`);
-    log(`[tarot-love] free2 chars/bytes: ${ZWSP.length}/${byteLen(ZWSP)}`);
+    log(`[tarot-love] free5 chars/bytes: ${p5.length}/${byteLen(p5)}`);
+    log(`[tarot-love] free4 chars/bytes: ${p4.length}/${byteLen(p4)}`);
+    log(`[tarot-love] free3 chars/bytes: ${p3.length}/${byteLen(p3)}`);
+    log(`[tarot-love] free2 chars/bytes: ${p2.length}/${byteLen(p2)}`);
     log(`[tarot-love] free1 chars/bytes: ${free1.length}/${byteLen(free1)}`);
+
+    const payload = {
+      uid,
+      free6: safe(shortText),
+      free5: safe(p5),
+      free4: safe(p4),
+      free3: safe(p3),
+      free2: safe(p2),
+      free1: safe(free1),
+    };
 
     const wb = await postForm(WRITEBACK_URL, payload);
     log(`[tarot-love] writeBack POST: ${WRITEBACK_URL}`);
