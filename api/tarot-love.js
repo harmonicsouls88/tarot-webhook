@@ -14,11 +14,10 @@ function safeStr(v) {
   try { return String(v); } catch { return ""; }
 }
 
-function normalizeNewlines(s) {
-  // もし json 等に「\n」が文字として入ってるケースも吸収
+function normalizeSpaces(s) {
   return safeStr(s)
     .replace(/\r\n/g, "\n").replace(/\r/g, "\n")
-    .replace(/\\n/g, "\n"); // ← これ超重要（"\n"が文字で入ってる時）
+    .replace(/\\n/g, "\n"); // "\n" が文字として入ってるケース対策
 }
 
 function pickFirst(obj, keys) {
@@ -184,14 +183,13 @@ function themeLabel(theme) {
  * free5 -> free3 -> free4 に流す（free1はテーマ用に空ける）
  */
 function splitFreeByBytes(text, limitBytes = 420) {
-  const s = normalizeNewlines(text).trim();
+  const s = normalizeSpaces(text).trim();
   if (!s) return ["", "", ""];
 
   const parts = [];
   let cur = s;
 
   const take = (str) => {
-    // バイト上限まで安全に切り出し（UTF-8で壊れないように）
     let out = "";
     for (const ch of str) {
       const next = out + ch;
