@@ -292,99 +292,96 @@ module.exports = async (req, res) => {
       safeStr(commonLine.short).trim() ||
       (commonJson && !commonJson.__error ? `今日は「${safeStr(commonJson.title)}」の整え。小さくでOKです🌿` : "");
 
-    // ✅ longBase は組み立て式（focus/action がある限り必ず出る）
-    let longBase = "";
-    if (commonJson && !commonJson.__error) {
-      const lines = [];
-      lines.push(`🌿 今日の整えワンポイント（詳細）`);
-      lines.push(``);
-      lines.push(`【カード】 ${safeStr(commonJson.title)}`);
+       // ✅ longBase は使わず、free5〜free2 を安定生成する
+    const closing = "🌙 焦らなくて大丈夫。整えた分だけ、現実がついてきます。";
+    const cta = "🌿 もっと整えたい時は、LINEに戻って「整え直し」を選べます";
 
+    // ✅テーマ addon
+    const idsTried = altCardIds(cardId);
+    const themeAddon = getThemeAddon(themeJson, cardId);
+
+    log(`[tarot-love] theme keys tried: ${idsTried.join(",")}`);
+    log(`[tarot-love] themeAddon len: ${themeAddon.length}`);
+
+    let p5 = "";
+    let p4 = "";
+    let p3 = "";
+    let p2 = "";
+    let free1 = cta;
+
+    if (commonJson && !commonJson.__error) {
       const mainMsg =
         safeStr(commonJson.message).trim() ||
         safeStr(commonLine.long).trim() ||
         safeStr(commonLine.full).trim();
 
-      if (mainMsg) lines.push(mainMsg);
+      // free5：ヘッダ＋カード＋本文
+      p5 = cutByBytes(
+        [
+          "🌿 今日の整えワンポイント（詳細）",
+          "",
+          `【カード】 ${safeStr(commonJson.title)}`,
+          mainMsg || ""
+        ].filter(Boolean).join("\n").trim(),
+        340
+      );
 
-      lines.push(``);
+      // free4：意識すること（focus）
+      p4 = cutByBytes(
+        safeStr(commonJson.focus).trim()
+          ? ["【意識すること】", safeStr(commonJson.focus).trim()].join("\n")
+          : "",
+        340
+      );
 
-      if (safeStr(commonJson.focus).trim()) {
-        lines.push(`【意識すること】`);
-        lines.push(safeStr(commonJson.focus).trim());
-        lines.push(``);
-      }
+      // free3：今日の一手（action）＋締め
+      p3 = cutByBytes(
+        safeStr(commonJson.action).trim()
+          ? ["【今日の一手】", safeStr(commonJson.action).trim(), "", closing].join("\n")
+          : closing,
+        340
+      );
+    } else {
+      // commonJson が読めない場合でも最低限表示
+      const fallbackMsg = safeStr(commonLine.long).trim() || safeStr(commonLine.full).trim();
 
-      if (safeStr(commonJson.action).trim()) {
-        lines.push(`【今日の一手】`);
-        lines.push(safeStr(commonJson.action).trim());
-        lines.push(``);
-      }
+      p5 = cutByBytes(
+        [
+          "🌿 今日の整えワンポイント（詳細）",
+          "",
+          `【カード】 ${cardId}`,
+          fallbackMsg || ""
+        ].filter(Boolean).join("\n").trim(),
+        340
+      );
 
-// ✅締め・CTA
-const closing = "🌙 焦らなくて大丈夫。整えた分だけ、現実がついてきます。";
-const cta = "🌿 もっと整えたい時は、LINEに戻って「整え直し」を選べます";
+      p4 = "";
+      p3 = cutByBytes(closing, 340);
+    }
 
-// ✅テーマ addon（ここはそのままでOK）
-const idsTried = altCardIds(cardId);
-const themeAddon = getThemeAddon(themeJson, cardId);
+    // free2：テーマ視点（あれば）
+    p2 = cutByBytes(
+      themeAddon ? [`【${themeLabel(theme)}の視点】`, themeAddon].join("\n") : "",
+      340
+    );
 
-log(`[tarot-love] theme keys tried: ${idsTried.join(",")}`);
-log(`[tarot-love] themeAddon len: ${themeAddon.length}`);
+    // ✅ログ（chars/bytes）
+    log(`[tarot-love] free6 chars/bytes: ${shortText.length}/${byteLen(shortText)}`);
+    log(`[tarot-love] free5 chars/bytes: ${p5.length}/${byteLen(p5)}`);
+    log(`[tarot-love] free4 chars/bytes: ${p4.length}/${byteLen(p4)}`);
+    log(`[tarot-love] free3 chars/bytes: ${p3.length}/${byteLen(p3)}`);
+    log(`[tarot-love] free2 chars/bytes: ${p2.length}/${byteLen(p2)}`);
+    log(`[tarot-love] free1 chars/bytes: ${free1.length}/${byteLen(free1)}`);
 
-// ✅free5：ヘッダ＋カード＋本文（mainMsgまで）
-const p5 = cutByBytes(
-  [
-    "🌿 今日の整えワンポイント（詳細）",
-    "",
-    `【カード】 ${safeStr(commonJson.title)}`,
-    mainMsg ? mainMsg : ""
-  ].filter(Boolean).join("\n").trim(),
-  340
-);
-
-// ✅free4：意識すること（focus）
-const p4 = cutByBytes(
-  safeStr(commonJson.focus).trim()
-    ? ["【意識すること】", safeStr(commonJson.focus).trim()].join("\n")
-    : "",
-  340
-);
-
-// ✅free3：今日の一手（action）＋締め（欠け防止でここに入れる）
-const p3 = cutByBytes(
-  safeStr(commonJson.action).trim()
-    ? ["【今日の一手】", safeStr(commonJson.action).trim(), "", closing].join("\n")
-    : closing,
-  340
-);
-
-// ✅free2：テーマ視点（あれば）
-const p2 = cutByBytes(
-  themeAddon ? [`【${themeLabel(theme)}の視点】`, themeAddon].join("\n") : "",
-  340
-);
-
-// ✅free1：CTA固定（短いので切らない）
-const free1 = cta;
-
-// ✅ログ（chars/bytes）
-log(`[tarot-love] free6 chars/bytes: ${shortText.length}/${byteLen(shortText)}`);
-log(`[tarot-love] free5 chars/bytes: ${p5.length}/${byteLen(p5)}`);
-log(`[tarot-love] free4 chars/bytes: ${p4.length}/${byteLen(p4)}`);
-log(`[tarot-love] free3 chars/bytes: ${p3.length}/${byteLen(p3)}`);
-log(`[tarot-love] free2 chars/bytes: ${p2.length}/${byteLen(p2)}`);
-log(`[tarot-love] free1 chars/bytes: ${free1.length}/${byteLen(free1)}`);
-
-const payload = {
-  uid,
-  free6: safe(shortText),
-  free5: safe(p5),
-  free4: safe(p4),
-  free3: safe(p3),
-  free2: safe(p2),
-  free1: safe(free1),
-};
+    const payload = {
+      uid,
+      free6: safe(shortText),
+      free5: safe(p5),
+      free4: safe(p4),
+      free3: safe(p3),
+      free2: safe(p2),
+      free1: safe(free1),
+    };
 
     const wb = await postForm(WRITEBACK_URL, payload);
     log(`[tarot-love] writeBack POST: ${WRITEBACK_URL}`);
