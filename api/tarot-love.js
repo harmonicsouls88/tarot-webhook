@@ -292,7 +292,27 @@ module.exports = async (req, res) => {
       safeStr(commonLine.short).trim() ||
       (commonJson && !commonJson.__error ? `今日は「${safeStr(commonJson.title)}」の整え。小さくでOKです🌿` : "");
 
-       // ✅ longBase は使わず、free5〜free2 を安定生成する
+    function byteLen(s) {
+  return Buffer.byteLength(String(s || ""), "utf8");
+}
+
+// ✅UTF-8で「340bytes以内」に安全に切る（絵文字も壊さない）
+function cutByBytes(str, maxBytes) {
+  const s = String(str || "");
+  if (byteLen(s) <= maxBytes) return s;
+
+  // code point単位で安全に切る
+  let out = "";
+  let bytes = 0;
+  for (const ch of s) {
+    const b = byteLen(ch);
+    if (bytes + b > maxBytes) break;
+    out += ch;
+    bytes += b;
+  }
+  return out;
+}
+    // ✅ longBase は使わず、free5〜free2 を安定生成する
     const closing = "🌙 焦らなくて大丈夫。整えた分だけ、現実がついてきます。";
     const cta = "🌿 もっと整えたい時は、LINEに戻って「整え直し」を選べます";
 
