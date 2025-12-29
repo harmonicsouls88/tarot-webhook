@@ -83,14 +83,16 @@ function readJson(filePath) {
   }
 }
 
-// ✅上書き用（空でも必ず上書きする）
+// ===== 上書き安定化（空でも必ず上書きする） =====
 const ZWSP = "\u200b";
-const safe = (v) => {
-  const s = (v == null ? "" : String(v)).trim();
-  return s ? s : ZWSP;
+
+// trimしない（ここが地味に重要：分割の先頭一致が壊れる）
+const safeWB = (v) => {
+  const s = normalizeSpaces(v == null ? "" : String(v));
+  return s.length ? s : ZWSP;
 };
 
-// ✅form12 writeBack 先（固定）
+// form12 writeBack 先（固定）
 const WRITEBACK_URL = "https://l8x1uh5r.autosns.app/fm/xBi34LzVvN";
 
 async function readBody(req) {
@@ -101,9 +103,6 @@ async function readBody(req) {
   });
 }
 
-/**
- * ProLine POST（x-www-form-urlencoded）
- */
 async function postForm(url, data) {
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(data || {})) {
@@ -120,9 +119,7 @@ async function postForm(url, data) {
   return { ok: r.ok, status: r.status, text };
 }
 
-/**
- * cardId の揺れ（cups_06 / cups_6 など）を吸収する
- */
+// ===== cardId 揺れ吸収 =====
 function altCardIds(cardId) {
   const id = safeStr(cardId).toLowerCase().trim();
   const m = id.match(/^(major|cups|wands|swords|pentacles)_(\d{1,2})$/);
@@ -136,9 +133,6 @@ function altCardIds(cardId) {
   return Array.from(new Set([`${prefix}_${two}`, `${prefix}_${one}`, id]));
 }
 
-/**
- * themeJson の構造違いも吸収して addon を拾う
- */
 function getThemeAddon(themeJson, cardId) {
   if (!themeJson || themeJson.__error) return "";
 
@@ -148,12 +142,10 @@ function getThemeAddon(themeJson, cardId) {
     const hit = ids.map(k => safeStr(themeJson.append[k]).trim()).find(Boolean);
     if (hit) return hit;
   }
-
   if (themeJson.cards && typeof themeJson.cards === "object") {
     const hit = ids.map(k => safeStr(themeJson.cards[k]).trim()).find(Boolean);
     if (hit) return hit;
   }
-
   const hit = ids.map(k => safeStr(themeJson[k]).trim()).find(Boolean);
   if (hit) return hit;
 
@@ -170,80 +162,50 @@ function themeLabel(theme) {
   }
 }
 
+// ===== bytes分割（ここが今回の本丸）=====
 function byteLen(s) {
   return new TextEncoder().encode(s || "").length;
 }
 
-/**
- * ✅「・」だけの行や空行の連続を整える（見た目の “抜け” 対策）
- */
-function tidyLines(s) {
-  const text = normalizeSpaces(s || "");
-  const lines = text.split("\n")
-    .map(l => l.replace(/\s+$/g, ""))         // 右trim
-    .filter(l => !/^\s*・\s*$/.test(l));      // "・"単体行を除去
-
-  // 連続する空行を1つまでに圧縮
-  const out = [];
-  let blank = 0;
-  for (const l of lines) {
-    if (l.trim() === "") {
-      blank++;
-      if (blank <= 1) out.push("");
-    } else {
-      blank = 0;
-      out.push(l);
-    }
-  }
-  return out.join("\n").trim();
-}
-
-/**
- * ✅ バイト上限で “欠けずに” 先頭から切り出す（消費した index も返す）
- * - surrogate pair も壊さない
- */
 function takeByBytes(text, limitBytes) {
   const s = normalizeSpaces(text || "");
-  if (!s) return { part: "", consumed: 0 };
+  if (!s) return { chunk: "", rest: "" };
+  if (byteLen(s) <= limitBytes) return { chunk: s, rest: "" };
 
   let bytes = 0;
-  let i = 0;
+  let cutIndex = 0; // code unit index
 
-  while (i < s.length) {
-    const code = s.codePointAt(i);
-    const ch = String.fromCodePoint(code);
+  // for..of は codepoint 単位（絵文字/サロゲートも崩れない）
+  for (const ch of s) {
     const b = byteLen(ch);
-
     if (bytes + b > limitBytes) break;
     bytes += b;
-
-    i += (code > 0xffff ? 2 : 1);
+    cutIndex += ch.length; // code unit数
   }
 
-  return { part: s.slice(0, i), consumed: i };
+  let chunk = s.slice(0, cutIndex);
+  let rest = s.slice(cutIndex);
+
+  // 先頭の改行だけは落としてOK（“次の枠が改行始まり”になるのを避ける）
+  while (rest.startsWith("\n")) rest = rest.slice(1);
+
+  return { chunk, rest };
 }
 
-/**
- * ✅ free5/free3/free4 に “欠けずに” 分割する
- */
-function splitFreeByBytes(text, limitBytes = 360) {
-  const s = tidyLines(text);
-  if (!s) return ["", "", ""];
-
-  let rest = s;
-
-  const t1 = takeByBytes(rest, limitBytes);
-  const a = tidyLines(t1.part);
-  rest = rest.slice(t1.consumed).trim();
-
-  const t2 = takeByBytes(rest, limitBytes);
-  const b = tidyLines(t2.part);
-  rest = rest.slice(t2.consumed).trim();
-
-  const t3 = takeByBytes(rest, limitBytes);
-  const c = tidyLines(t3.part);
-
-  return [a, b, c];
+function splitByBytes(text, limits) {
+  let rest = normalizeSpaces(text || "");
+  const out = [];
+  for (const lim of limits) {
+    const r = takeByBytes(rest, lim);
+    out.push(r.chunk);
+    rest = r.rest;
+    if (!rest) break;
+  }
+  // 残りがまだある場合は最後にくっつけ（取りこぼし防止）
+  if (rest) {
+    out[out.length - 1] = (out[out.length - 1] || "") + "\n" + rest;
+  }
+  return out;
 }
 
 module.exports = async (req, res) => {
@@ -312,7 +274,7 @@ module.exports = async (req, res) => {
       safeStr(commonLine.short).trim() ||
       (commonJson && !commonJson.__error ? `今日は「${safeStr(commonJson.title)}」の整え。小さくでOKです🌿` : "");
 
-    // ✅ longBase は “必ず組み立て”
+    // ===== longBaseは“組み立て式” =====
     let longBase = "";
     if (commonJson && !commonJson.__error) {
       const lines = [];
@@ -327,60 +289,64 @@ module.exports = async (req, res) => {
 
       if (mainMsg) lines.push(mainMsg);
 
+      lines.push(``);
       if (safeStr(commonJson.focus).trim()) {
-        lines.push(``);
         lines.push(`【意識すること】`);
         lines.push(safeStr(commonJson.focus).trim());
-      }
-
-      if (safeStr(commonJson.action).trim()) {
         lines.push(``);
+      }
+      if (safeStr(commonJson.action).trim()) {
         lines.push(`【今日の一手】`);
         lines.push(safeStr(commonJson.action).trim());
+        lines.push(``);
       }
 
-      longBase = tidyLines(lines.join("\n"));
+      // 〆は “本文側” に入れる（ここが抜けやすいので固定で入れる）
+      lines.push(`焦らなくて大丈夫。整えた分だけ、現実がついてきます。`);
+
+      longBase = lines.join("\n");
     } else {
-      longBase = tidyLines(safeStr(commonLine.long).trim() || safeStr(commonLine.full).trim());
+      longBase = safeStr(commonLine.long).trim() || safeStr(commonLine.full).trim();
     }
 
+    // ===== テーマ addon =====
     const idsTried = altCardIds(cardId);
-    const addonText = getThemeAddon(themeJson, cardId);
+    const themeAddon = getThemeAddon(themeJson, cardId);
 
     log(`[tarot-love] theme keys tried: ${idsTried.join(",")}`);
-    log(`[tarot-love] themeAddon len: ${addonText.length}`);
+    log(`[tarot-love] themeAddon len: ${themeAddon.length}`);
 
     const cta = `🌿 もっと整えたい時は、LINEに戻って「整え直し」を選べます`;
-    const tail = `焦らなくて大丈夫。整えた分だけ、現実がついてきます。`;
 
-    // ✅ 末尾の励ましは “必ずどこかに入れる”
-    const longForSplit = tidyLines(`${longBase}\n\n${tail}`);
+    // ===== bytes分割（余裕を持って300に下げる）=====
+    // free5 → free3 → free4 → free2 に順番に入れる
+    const parts = splitByBytes(longBase, [300, 300, 300, 300]);
+    const p1 = parts[0] || "";
+    const p2 = parts[1] || "";
+    const p3 = parts[2] || "";
+    const p4 = parts[3] || "";
 
-    const [a, b, c] = splitFreeByBytes(longForSplit, 360);
-
-    // free2 は “予備” として、空でも上書き（混入防止）
-    const free2 = ""; // ←将来使いたくなったらここに入れる
-
-    const free1 = addonText
-      ? tidyLines(`【${themeLabel(theme)}の視点】\n${addonText}\n\n${cta}`)
+    // free1は「テーマ視点 + CTA」（本文とは別枠）
+    const free1 = themeAddon
+      ? `【${themeLabel(theme)}の視点】\n${themeAddon}\n\n${cta}`
       : cta;
 
-    // ✅ログ（chars + bytes）
+    // ログ（chars/bytes）
     log(`[tarot-love] free6 chars/bytes: ${shortText.length}/${byteLen(shortText)}`);
-    log(`[tarot-love] free5 chars/bytes: ${a.length}/${byteLen(a)}`);
-    log(`[tarot-love] free3 chars/bytes: ${b.length}/${byteLen(b)}`);
-    log(`[tarot-love] free4 chars/bytes: ${c.length}/${byteLen(c)}`);
-    log(`[tarot-love] free2 chars/bytes: ${free2.length}/${byteLen(free2)}`);
+    log(`[tarot-love] free5 chars/bytes: ${p1.length}/${byteLen(p1)}`);
+    log(`[tarot-love] free3 chars/bytes: ${p2.length}/${byteLen(p2)}`);
+    log(`[tarot-love] free4 chars/bytes: ${p3.length}/${byteLen(p3)}`);
+    log(`[tarot-love] free2 chars/bytes: ${p4.length}/${byteLen(p4)}`);
     log(`[tarot-love] free1 chars/bytes: ${free1.length}/${byteLen(free1)}`);
 
     const payload = {
       uid,
-      free6: safe(shortText),
-      free5: safe(a),
-      free3: safe(b),
-      free4: safe(c),
-      free2: safe(free2),
-      free1: safe(free1),
+      free6: safeWB(shortText),
+      free5: safeWB(p1),
+      free3: safeWB(p2),
+      free4: safeWB(p3),
+      free2: safeWB(p4),
+      free1: safeWB(free1),
     };
 
     const wb = await postForm(WRITEBACK_URL, payload);
