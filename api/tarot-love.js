@@ -15,9 +15,8 @@ function safeStr(v) {
 }
 
 function normalizeSpaces(s) {
-  return safeStr(s)
-    .replace(/\r\n/g, "\n").replace(/\r/g, "\n")
-    .replace(/\\n/g, "\n"); // "\n" が文字として入ってるケース対策
+  // ✅ ここが消えると normalizeSpaces not defined になるので残す
+  return safeStr(s).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 }
 
 function pickFirst(obj, keys) {
@@ -141,27 +140,26 @@ function altCardIds(cardId) {
 
 /**
  * themeJson の構造違いも吸収して addon を拾う
- * あなたの json は主にこれ：
- * { id, label, append: { major_00:"...", ... } }
+ * { id, label, append: { cups_06:"...", ... } } など
  */
 function getThemeAddon(themeJson, cardId) {
   if (!themeJson || themeJson.__error) return "";
 
   const ids = altCardIds(cardId);
 
-  // ✅ 1) append が “カード別辞書” のパターン（あなたの形式）
+  // 1) append が “カード別辞書”
   if (themeJson.append && typeof themeJson.append === "object") {
     const hit = ids.map(k => safeStr(themeJson.append[k]).trim()).find(Boolean);
     if (hit) return hit;
   }
 
-  // ✅ 2) cards: { cups_06:"...", ... } パターン
+  // 2) cards: { cups_06:"...", ... }
   if (themeJson.cards && typeof themeJson.cards === "object") {
     const hit = ids.map(k => safeStr(themeJson.cards[k]).trim()).find(Boolean);
     if (hit) return hit;
   }
 
-  // ✅ 3) 直下辞書：{ cups_06:"...", ... }
+  // 3) 直下辞書：{ cups_06:"...", ... }
   const hit = ids.map(k => safeStr(themeJson[k]).trim()).find(Boolean);
   if (hit) return hit;
 
@@ -178,35 +176,52 @@ function themeLabel(theme) {
   }
 }
 
-/**
- * free枠が短めで切れがちなので分割（安全側に 150）
- * free5 -> free3 -> free4 に流す（free1はテーマ用に空ける）
- */
-function splitFreeByBytes(text, limitBytes = 420) {
+/* ============================
+ * ✅【変更点A】文字数ではなく“バイト数”で切る（日本語の途中切れ対策）
+ * ============================ */
+function byteLen(s) {
+  return new TextEncoder().encode(s || "").length;
+}
+
+function cutByBytes(s, limitBytes) {
+  const text = normalizeSpaces(s || "");
+  if (byteLen(text) <= limitBytes) return text;
+
+  // 改行優先で積む
+  const lines = text.split("\n");
+  let out = "";
+  for (const line of lines) {
+    const next = out ? out + "\n" + line : line;
+    if (byteLen(next) > limitBytes) break;
+    out = next;
+  }
+  if (out) return out.trim();
+
+  // 改行が効かない場合は1文字ずつ（安全）
+  let acc = "";
+  for (const ch of text) {
+    const next = acc + ch;
+    if (byteLen(next) > limitBytes) break;
+    acc = next;
+  }
+  return acc.trim();
+}
+
+function splitFreeByBytes(text, limitBytes = 360) {
   const s = normalizeSpaces(text).trim();
   if (!s) return ["", "", ""];
 
-  const parts = [];
-  let cur = s;
+  let rest = s;
 
-  const take = (str) => {
-    let out = "";
-    for (const ch of str) {
-      const next = out + ch;
-      if (Buffer.byteLength(next, "utf8") > limitBytes) break;
-      out = next;
-    }
-    return out;
-  };
+  const a = cutByBytes(rest, limitBytes);
+  rest = rest.slice(a.length).trim();
 
-  while (Buffer.byteLength(cur, "utf8") > limitBytes && parts.length < 2) {
-    const head = take(cur);
-    parts.push(head.trim());
-    cur = cur.slice(head.length).trim();
-  }
-  parts.push(cur.trim());
+  const b = cutByBytes(rest, limitBytes);
+  rest = rest.slice(b.length).trim();
 
-  return [parts[0] || "", parts[1] || "", parts[2] || ""];
+  const c = cutByBytes(rest, limitBytes);
+
+  return [a, b, c];
 }
 
 module.exports = async (req, res) => {
@@ -270,22 +285,32 @@ module.exports = async (req, res) => {
     log(`[tarot-love] themeFrom: ${themePath}`);
     log(`[tarot-love] addon: ${themeJson && !themeJson.__error ? "yes" : "no"}`);
 
-    const commonLine = (commonJson && !commonJson.__error && commonJson.line) ? commonJson.line : {};
+    const commonLine =
+      (commonJson && !commonJson.__error && commonJson.line) ? commonJson.line : {};
 
     const shortText =
       safeStr(commonLine.short).trim() ||
       (commonJson && !commonJson.__error ? `今日は「${safeStr(commonJson.title)}」の整え。小さくでOKです🌿` : "");
 
-    // --- longBase（カード本文）
+    /* ============================
+     * ✅【変更点B】longBaseを“必ず組み立て式”で作る
+     * - line.long があっても補助として扱う
+     * - focus/action がある限り【意識すること】【今日の一手】が必ず出る
+     * ============================ */
     let longBase = "";
-    if (safeStr(commonLine.long).trim()) longBase = safeStr(commonLine.long).trim();
-    else if (safeStr(commonLine.full).trim()) longBase = safeStr(commonLine.full).trim();
-    else if (commonJson && !commonJson.__error) {
+    if (commonJson && !commonJson.__error) {
       const lines = [];
       lines.push(`🌿 今日の整えワンポイント（詳細）`);
       lines.push(``);
       lines.push(`【カード】 ${safeStr(commonJson.title)}`);
-      if (safeStr(commonJson.message).trim()) lines.push(safeStr(commonJson.message).trim());
+
+      const mainMsg =
+        safeStr(commonJson.message).trim() ||
+        safeStr(commonLine.long).trim() ||   // ← long は補助
+        safeStr(commonLine.full).trim();
+
+      if (mainMsg) lines.push(mainMsg);
+
       lines.push(``);
       if (safeStr(commonJson.focus).trim()) {
         lines.push(`【意識すること】`);
@@ -296,17 +321,19 @@ module.exports = async (req, res) => {
         lines.push(`【今日の一手】`);
         lines.push(safeStr(commonJson.action).trim());
       }
+
       longBase = lines.join("\n").trim();
+    } else {
+      longBase = safeStr(commonLine.long).trim() || safeStr(commonLine.full).trim();
     }
 
-    // ✅テーマ addon（カード別コメントを拾う）
+    // ✅テーマ addon
     const idsTried = altCardIds(cardId);
     const themeAddon = getThemeAddon(themeJson, cardId);
 
     log(`[tarot-love] theme keys tried: ${idsTried.join(",")}`);
     log(`[tarot-love] themeAddon len: ${themeAddon.length}`);
 
-    // ✅原因切り分けログ（空なら構造を見る）
     if (!themeAddon && themeJson && !themeJson.__error && typeof themeJson === "object") {
       log(`[tarot-love] themeJson keys sample: ${Object.keys(themeJson).slice(0, 40).join(",")}`);
       if (themeJson.append && typeof themeJson.append === "object") {
@@ -314,31 +341,34 @@ module.exports = async (req, res) => {
       }
     }
 
-    // ✅表示設計：
-    // free5/free3/free4 = カード本文（長ければ分割）
-    // free1 = テーマ追記 + 最後の1行（ここに必ず分離して入れる）
+    // ✅表示設計
     const cta = `🌿 もっと整えたい時は、LINEに戻って「整え直し」を選べます`;
 
-    const [a, b, c] = splitFreeByBytes(longBase, 420);
+    /* ============================
+     * ✅【変更点C】分割を “bytes基準” に変更
+     * - まず360 bytesで運用（日本語でも安全寄り）
+     * - 足りない/余るなら調整
+     * ============================ */
+    const [a, b, c] = splitFreeByBytes(longBase, 360);
 
     let free1 = "";
     if (themeAddon) {
       free1 = `【${themeLabel(theme)}の視点】\n${themeAddon}\n\n${cta}`.trim();
     } else {
-      // テーマが取れない時は、最後の1行だけ free1 に入れてもOK（見切れ防止）
       free1 = cta;
     }
 
+    // ✅ログ：length + bytes（切れ原因が見える）
     log(`[tarot-love] len free6(short): ${shortText.length}`);
     log(`[tarot-love] len free5(long1): ${a.length}`);
     log(`[tarot-love] len free3(long3): ${b.length}`);
     log(`[tarot-love] len free4(long4): ${c.length}`);
     log(`[tarot-love] len free1(theme+cta): ${free1.length}`);
 
-log(`[tarot-love] bytes free5: ${Buffer.byteLength(a, "utf8")}`);
-log(`[tarot-love] bytes free3: ${Buffer.byteLength(b, "utf8")}`);
-log(`[tarot-love] bytes free4: ${Buffer.byteLength(c, "utf8")}`);
-log(`[tarot-love] bytes free1: ${Buffer.byteLength(free1, "utf8")}`);
+    log(`[tarot-love] bytes free5: ${byteLen(a)}`);
+    log(`[tarot-love] bytes free3: ${byteLen(b)}`);
+    log(`[tarot-love] bytes free4: ${byteLen(c)}`);
+    log(`[tarot-love] bytes free1: ${byteLen(free1)}`);
 
     const payload = {
       uid,
