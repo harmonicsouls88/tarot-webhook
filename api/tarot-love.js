@@ -133,8 +133,6 @@ function altCardIds(cardId) {
   const n = parseInt(m[2], 10);
   const two = String(n).padStart(2, "0"); // 06
   const one = String(n);                  // 6
-
-  // 重複を除いた順序付き
   return Array.from(new Set([`${prefix}_${two}`, `${prefix}_${one}`, id]));
 }
 
@@ -147,19 +145,14 @@ function getThemeAddon(themeJson, cardId) {
 
   const ids = altCardIds(cardId);
 
-  // 1) append が “カード別辞書”
   if (themeJson.append && typeof themeJson.append === "object") {
     const hit = ids.map(k => safeStr(themeJson.append[k]).trim()).find(Boolean);
     if (hit) return hit;
   }
-
-  // 2) cards: { cups_06:"...", ... }
   if (themeJson.cards && typeof themeJson.cards === "object") {
     const hit = ids.map(k => safeStr(themeJson.cards[k]).trim()).find(Boolean);
     if (hit) return hit;
   }
-
-  // 3) 直下辞書：{ cups_06:"...", ... }
   const hit = ids.map(k => safeStr(themeJson[k]).trim()).find(Boolean);
   if (hit) return hit;
 
@@ -177,51 +170,66 @@ function themeLabel(theme) {
 }
 
 /* ============================
- * ✅【変更点A】文字数ではなく“バイト数”で切る（日本語の途中切れ対策）
+ * ✅【完成版】“bytes基準 + 消費文字数追跡”で安全に分割
+ * - trim で長さがズレて欠ける/重複する問題を根絶
+ * - free5/free3/free4/free2 に本文を流す（最大4枠）
  * ============================ */
 function byteLen(s) {
   return new TextEncoder().encode(s || "").length;
 }
 
-function cutByBytes(s, limitBytes) {
-  const text = normalizeSpaces(s || "");
-  if (byteLen(text) <= limitBytes) return text;
+/**
+ * 先頭から limitBytes 以内で切る
+ * - できれば「最後の改行」位置で切る（読みやすい）
+ * - 戻り値：{ chunk, consumed }
+ *   chunk: 表示用文字列（末尾の余分な改行だけ軽く整理）
+ *   consumed: 元文字列から何文字消費したか（これが超重要）
+ */
+function takeChunkByBytes(src, limitBytes) {
+  const s = normalizeSpaces(src || "");
+  if (!s) return { chunk: "", consumed: 0 };
+  if (byteLen(s) <= limitBytes) return { chunk: s.trim(), consumed: s.length };
 
-  // 改行優先で積む
-  const lines = text.split("\n");
-  let out = "";
-  for (const line of lines) {
-    const next = out ? out + "\n" + line : line;
-    if (byteLen(next) > limitBytes) break;
-    out = next;
-  }
-  if (out) return out.trim();
+  let bytes = 0;
+  let i = 0;
+  let lastNl = -1;
 
-  // 改行が効かない場合は1文字ずつ（安全）
-  let acc = "";
-  for (const ch of text) {
-    const next = acc + ch;
-    if (byteLen(next) > limitBytes) break;
-    acc = next;
+  for (; i < s.length; i++) {
+    const ch = s[i];
+    const b = byteLen(ch);
+    if (bytes + b > limitBytes) break;
+    bytes += b;
+    if (ch === "\n") lastNl = i;
   }
-  return acc.trim();
+
+  // 改行で気持ちよく切れるなら、そこまでを採用
+  let cut = i;
+  if (lastNl >= 0 && lastNl >= Math.floor(i * 0.6)) {
+    cut = lastNl + 1; // 改行含めて消費
+  }
+
+  const rawChunk = s.slice(0, cut);
+  const chunk = rawChunk.replace(/\n{3,}/g, "\n\n").trim(); // 改行多すぎだけ整える
+
+  return { chunk, consumed: cut };
 }
 
-function splitFreeByBytes(text, limitBytes = 360) {
+function splitInto4ByBytes(text, limitBytes = 340) {
   const s = normalizeSpaces(text).trim();
-  if (!s) return ["", "", ""];
+  if (!s) return ["", "", "", ""];
 
   let rest = s;
+  const out = [];
 
-  const a = cutByBytes(rest, limitBytes);
-  rest = rest.slice(a.length).trim();
+  for (let k = 0; k < 4; k++) {
+    const { chunk, consumed } = takeChunkByBytes(rest, limitBytes);
+    out.push(chunk);
+    rest = rest.slice(consumed).trimStart();
+    if (!rest) break;
+  }
 
-  const b = cutByBytes(rest, limitBytes);
-  rest = rest.slice(b.length).trim();
-
-  const c = cutByBytes(rest, limitBytes);
-
-  return [a, b, c];
+  while (out.length < 4) out.push("");
+  return out; // [p1,p2,p3,p4]
 }
 
 module.exports = async (req, res) => {
@@ -292,11 +300,7 @@ module.exports = async (req, res) => {
       safeStr(commonLine.short).trim() ||
       (commonJson && !commonJson.__error ? `今日は「${safeStr(commonJson.title)}」の整え。小さくでOKです🌿` : "");
 
-    /* ============================
-     * ✅【変更点B】longBaseを“必ず組み立て式”で作る
-     * - line.long があっても補助として扱う
-     * - focus/action がある限り【意識すること】【今日の一手】が必ず出る
-     * ============================ */
+    // ✅【変更点B】longBaseを“必ず組み立て式”で作る
     let longBase = "";
     if (commonJson && !commonJson.__error) {
       const lines = [];
@@ -306,7 +310,7 @@ module.exports = async (req, res) => {
 
       const mainMsg =
         safeStr(commonJson.message).trim() ||
-        safeStr(commonLine.long).trim() ||   // ← long は補助
+        safeStr(commonLine.long).trim() ||
         safeStr(commonLine.full).trim();
 
       if (mainMsg) lines.push(mainMsg);
@@ -334,52 +338,33 @@ module.exports = async (req, res) => {
     log(`[tarot-love] theme keys tried: ${idsTried.join(",")}`);
     log(`[tarot-love] themeAddon len: ${themeAddon.length}`);
 
-    if (!themeAddon && themeJson && !themeJson.__error && typeof themeJson === "object") {
-      log(`[tarot-love] themeJson keys sample: ${Object.keys(themeJson).slice(0, 40).join(",")}`);
-      if (themeJson.append && typeof themeJson.append === "object") {
-        log(`[tarot-love] themeJson.append keys sample: ${Object.keys(themeJson.append).slice(0, 40).join(",")}`);
-      }
-    }
-
-    // ✅表示設計
     const cta = `🌿 もっと整えたい時は、LINEに戻って「整え直し」を選べます`;
 
-    /* ============================
-     * ✅【変更点C】分割を “bytes基準” に変更
-     * - まず360 bytesで運用（日本語でも安全寄り）
-     * - 足りない/余るなら調整
-     * ============================ */
-    const [a, b, c] = splitFreeByBytes(longBase, 360);
+    // ✅【変更点C】本文は free5/free3/free4/free2 に最大4分割
+    // まずは 340 bytes 推奨（日本語でも安全寄り）
+    const [p5, p3, p4, p2] = splitInto4ByBytes(longBase, 340);
 
-    let free1 = "";
-    if (themeAddon) {
-      free1 = `【${themeLabel(theme)}の視点】\n${themeAddon}\n\n${cta}`.trim();
-    } else {
-      free1 = cta;
-    }
+    // ✅free1 は「テーマ視点 + CTA」に固定
+    const free1 = themeAddon
+      ? `【${themeLabel(theme)}の視点】\n${themeAddon}\n\n${cta}`.trim()
+      : cta;
 
-    // ✅ログ：length + bytes（切れ原因が見える）
+    // ✅ログ（length + bytes）
     log(`[tarot-love] len free6(short): ${shortText.length}`);
-    log(`[tarot-love] len free5(long1): ${a.length}`);
-    log(`[tarot-love] len free3(long3): ${b.length}`);
-    log(`[tarot-love] len free4(long4): ${c.length}`);
-    log(`[tarot-love] len free1(theme+cta): ${free1.length}`);
-
-    log(`[tarot-love] bytes free5: ${byteLen(a)}`);
-    log(`[tarot-love] bytes free3: ${byteLen(b)}`);
-    log(`[tarot-love] bytes free4: ${byteLen(c)}`);
-    log(`[tarot-love] bytes free1: ${byteLen(free1)}`);
+    log(`[tarot-love] len free5: ${p5.length} / bytes ${byteLen(p5)}`);
+    log(`[tarot-love] len free3: ${p3.length} / bytes ${byteLen(p3)}`);
+    log(`[tarot-love] len free4: ${p4.length} / bytes ${byteLen(p4)}`);
+    log(`[tarot-love] len free2: ${p2.length} / bytes ${byteLen(p2)}`);
+    log(`[tarot-love] len free1(theme+cta): ${free1.length} / bytes ${byteLen(free1)}`);
 
     const payload = {
       uid,
       free6: safe(shortText),
-      free5: safe(a),
-      free3: safe(b),
-      free4: safe(c),
+      free5: safe(p5),
+      free3: safe(p3),
+      free4: safe(p4),
+      free2: safe(p2),     // ★使う：第4枠
       free1: safe(free1),
-
-      // 使ってなくても毎回上書き（混入防止）
-      free2: ZWSP,
     };
 
     const wb = await postForm(WRITEBACK_URL, payload);
