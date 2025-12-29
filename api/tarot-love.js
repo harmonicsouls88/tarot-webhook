@@ -310,7 +310,6 @@ module.exports = async (req, res) => {
     const cta = `焦らなくて大丈夫。整えた分だけ、現実がついてきます。`;
 const footer = `🌿 もっと整えたい時は、LINEに戻って「整え直し」を選べます`;
 
-// longBase から、意識/一手を“確実に”分離する
 const src = normalizeSpaces(longBase || "").trim();
 
 // 【今日の一手】以降を切り出し
@@ -320,7 +319,7 @@ let actionBlock = "";
 const idx = src.indexOf("【今日の一手】");
 if (idx >= 0) {
   beforeAction = src.slice(0, idx).trim();
-  actionBlock = src.slice(idx).trim(); // 見出し含めて丸ごと
+  actionBlock = src.slice(idx).trim();
 }
 
 // free5=前半（意識まで）
@@ -332,8 +331,7 @@ const free3 = actionBlock;
 // free2=最後の一言（必ず入れる）
 const free2 = cta;
 
-// free1=テーマ + footer
-const themeAddon = getThemeAddon(themeJson, cardId);
+// free1=テーマ + footer（※ themeAddon は “既に上で宣言済み” を使う）
 const free1 = themeAddon
   ? `【${themeLabel(theme)}の視点】\n${themeAddon}\n\n${footer}`.trim()
   : footer;
@@ -343,8 +341,8 @@ const payload = {
   free6: safe(shortText),
   free5: safe(free5),
   free3: safe(free3),
-  free4: ZWSP,         // 未使用でOK（上書きだけする）
-  free2: safe(free2),  // ← ここが必ず入る
+  free4: ZWSP,        // 未使用でOK（上書き用）
+  free2: safe(free2), // ← 必ず入れる
   free1: safe(free1),
 };
 
